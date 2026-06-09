@@ -20,8 +20,8 @@
 
   let state = {
     isAuthenticated: false,
-    scriptUrl: 'demo',
-    eventName: 'Evento de Demonstração 🎓',
+    scriptUrl: '',
+    eventName: '',
     participants: [],
     recentCheckins: [],
     scanner: null,
@@ -34,15 +34,6 @@
 
   // Background sync interval
   let autoRefreshInterval = null;
-
-  // Default Mock Participants for Demo Mode
-  const MOCK_PARTICIPANTS = [
-    { name: 'Alice Silva', email: 'alice@example.com', institution: 'IFMS', id: 'EVT-ALICE123', status: 'absent', checkinDate: '' },
-    { name: 'Bruno Santos', email: 'bruno@example.com', institution: 'IFMS', id: 'EVT-BRUNO456', status: 'absent', checkinDate: '' },
-    { name: 'Carla Souza', email: 'carla@example.com', institution: 'USP', id: 'EVT-CARLA789', status: 'present', checkinDate: '08/06/2026 21:00:00' },
-    { name: 'Diego Lima', email: 'diego@example.com', institution: 'UNICAMP', id: 'EVT-DIEGO012', status: 'absent', checkinDate: '' },
-    { name: 'Elisa Ferreira', email: 'elisa@example.com', institution: 'UFRJ', id: 'EVT-ELISA345', status: 'present', checkinDate: '08/06/2026 20:30:15' }
-  ];
 
   // ============================================
   // DOM ELEMENTS
@@ -143,30 +134,23 @@
   }
 
   function loadConfig() {
-    state.scriptUrl = localStorage.getItem(STORAGE_KEYS.scriptUrl) || 'demo';
-    state.eventName = localStorage.getItem(STORAGE_KEYS.eventName) || (state.scriptUrl === 'demo' ? 'Evento de Demonstração 🎓' : 'Configurar Evento');
+    state.scriptUrl = localStorage.getItem(STORAGE_KEYS.scriptUrl) || '';
+    state.eventName = localStorage.getItem(STORAGE_KEYS.eventName) || '';
     state.recentCheckins = JSON.parse(localStorage.getItem(STORAGE_KEYS.recentCheckins) || '[]');
-    
-    // Load participants from storage
     state.participants = JSON.parse(localStorage.getItem(STORAGE_KEYS.participants) || '[]');
-
-    // Initialize mock participants if in demo mode and list is empty
-    if (state.scriptUrl === 'demo' && state.participants.length === 0) {
-      state.participants = [...MOCK_PARTICIPANTS];
-      localStorage.setItem(STORAGE_KEYS.participants, JSON.stringify(state.participants));
-    }
 
     if (state.eventName) {
       dom.configEventName.value = state.eventName;
       dom.headerEventName.textContent = state.eventName;
+    } else {
+      dom.headerEventName.textContent = 'Configurar Evento';
     }
     
-    // Show URL empty in config input if it is just the local 'demo' keyword
     if (state.scriptUrl) {
-      dom.configScriptUrl.value = state.scriptUrl === 'demo' ? '' : state.scriptUrl;
+      dom.configScriptUrl.value = state.scriptUrl;
     }
     
-    updateConnectionStatus(state.scriptUrl !== 'demo');
+    updateConnectionStatus(state.scriptUrl !== '');
   }
 
   function registerServiceWorker() {
@@ -231,15 +215,13 @@
       dom.loginError.classList.remove('visible');
 
       // Refresh / Load data
-      updateConnectionStatus(state.scriptUrl !== 'demo');
-      refreshData();
+      updateConnectionStatus(state.scriptUrl !== '');
+      if (state.scriptUrl) {
+        refreshData();
+      }
       startAutoRefresh();
 
-      if (state.scriptUrl === 'demo') {
-        showToast('Modo de Demonstração ativado! 🎓', 'info');
-      } else {
-        showToast('Bem-vindo ao EventCheck! 🎓', 'success');
-      }
+      showToast('Bem-vindo ao EventCheck! 🎓', 'success');
     } else {
       dom.loginError.classList.add('visible');
       dom.passwordInput.value = '';
@@ -302,25 +284,12 @@
   }
 
   // ============================================
-  // API COMMUNICATION (WITH DEMO BACKEND SIMULATION)
+  // API COMMUNICATION
   // ============================================
   async function apiGet(action) {
     if (!state.scriptUrl) {
       showToast('Configure a URL do Apps Script primeiro', 'warning');
       throw new Error('No script URL configured');
-    }
-
-    // Simulation for local Demo Mode
-    if (state.scriptUrl === 'demo') {
-      await new Promise(resolve => setTimeout(resolve, 300)); // Simulate response latency
-      if (action === 'list' || action === 'stats') {
-        return {
-          status: 'success',
-          participants: state.participants,
-          stats: calculateStats(state.participants)
-        };
-      }
-      return { status: 'error', message: 'Ação desconhecida: ' + action };
     }
 
     const url = `${state.scriptUrl}?action=${action}&password=${encodeURIComponent(APP_PASSWORD)}&t=${Date.now()}`;
@@ -341,67 +310,6 @@
     if (!state.scriptUrl) {
       showToast('Configure a URL do Apps Script primeiro', 'warning');
       throw new Error('No script URL configured');
-    }
-
-    // Simulation for local Demo Mode
-    if (state.scriptUrl === 'demo') {
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate response latency
-      const action = data.action || '';
-      
-      if (action === 'checkin') {
-        const participantId = data.id.toString().trim();
-        const index = state.participants.findIndex(p => p.id && p.id.toString().trim() === participantId);
-
-        if (index > -1) {
-          const p = state.participants[index];
-          if (p.status === 'present') {
-            return {
-              status: 'already_checked_in',
-              name: p.name,
-              message: `Participante já registrado em ${p.checkinDate}`
-            };
-          }
-
-          // Register presence locally
-          const now = new Date();
-          const formattedDate = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR');
-          p.status = 'present';
-          p.checkinDate = formattedDate;
-
-          localStorage.setItem(STORAGE_KEYS.participants, JSON.stringify(state.participants));
-
-          return {
-            status: 'success',
-            name: p.name,
-            message: `Check-in registrado com sucesso às ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-          };
-        }
-
-        return {
-          status: 'not_found',
-          message: 'Participante não encontrado. ID: ' + participantId
-        };
-      }
-
-      if (action === 'generate_ids') {
-        let count = 0;
-        state.participants.forEach(p => {
-          if (!p.id) {
-            p.id = 'EVT-' + Math.random().toString(36).substr(2, 8).toUpperCase();
-            count++;
-          }
-        });
-        if (count > 0) {
-          localStorage.setItem(STORAGE_KEYS.participants, JSON.stringify(state.participants));
-        }
-        return {
-          status: 'success',
-          count: count,
-          message: `${count} IDs gerados com sucesso`
-        };
-      }
-
-      return { status: 'error', message: 'Ação desconhecida: ' + action };
     }
 
     const response = await fetch(state.scriptUrl, {
@@ -442,7 +350,7 @@
       if (data.status === 'success') {
         state.participants = data.participants || [];
         updateDashboard(data.stats);
-        updateConnectionStatus(state.scriptUrl !== 'demo');
+        updateConnectionStatus(true);
         updateRecentList();
         
         // Auto-refresh QR Cards if we are currently looking at the QR Codes tab
@@ -451,7 +359,7 @@
           generateQRCards(state.participants);
         }
 
-        if (state.scriptUrl !== 'demo' && !silent) {
+        if (!silent) {
           showToast('Dados atualizados com sucesso', 'success');
         }
       } else if (data.status === 'unauthorized') {
@@ -479,8 +387,8 @@
     stopAutoRefresh();
     // Auto-refresh every 8 seconds to synchronize PCs and scanning phones in real-time
     autoRefreshInterval = setInterval(() => {
-      // Only auto-sync if logged in, tab is visible, and camera isn't active
-      if (state.isAuthenticated && !state.isScanning && document.visibilityState === 'visible') {
+      // Only auto-sync if logged in, tab is visible, camera isn't active, and a scriptUrl is set
+      if (state.isAuthenticated && !state.isScanning && state.scriptUrl && document.visibilityState === 'visible') {
         refreshData(true); // Silent refresh
       }
     }, 8000);
@@ -883,6 +791,7 @@
     });
   }
 
+  // Filter QR Codes by search query
   function filterQRCodes() {
     const query = dom.qrSearchInput.value.toLowerCase().trim();
     const cards = dom.qrGrid.querySelectorAll('.qr-card');
@@ -920,7 +829,6 @@
     dom.qrModal.classList.remove('hidden');
   }
 
-  // Close QR code modal
   function closeModal() {
     dom.qrModal.classList.add('hidden');
   }
@@ -948,24 +856,8 @@
     const eventName = dom.configEventName.value.trim();
     const scriptUrl = dom.configScriptUrl.value.trim();
 
-    // Revert to Demo Mode if user clears the URL input
     if (!scriptUrl) {
-      state.eventName = eventName || 'Evento de Demonstração 🎓';
-      state.scriptUrl = 'demo';
-      localStorage.setItem(STORAGE_KEYS.eventName, state.eventName);
-      localStorage.setItem(STORAGE_KEYS.scriptUrl, 'demo');
-      
-      // Reset local participants list to mock values
-      state.participants = [...MOCK_PARTICIPANTS];
-      localStorage.setItem(STORAGE_KEYS.participants, JSON.stringify(state.participants));
-      state.recentCheckins = [];
-      localStorage.setItem(STORAGE_KEYS.recentCheckins, JSON.stringify(state.recentCheckins));
-
-      dom.headerEventName.textContent = state.eventName;
-      updateConnectionStatus(false);
-      
-      showToast('Modo de Demonstração ativado! 🎓', 'info');
-      refreshData();
+      showToast('Preencha a URL do Google Apps Script', 'warning');
       return;
     }
 
@@ -989,12 +881,6 @@
   async function testConnection() {
     if (!state.scriptUrl) {
       showToast('Salve a URL do script primeiro', 'warning');
-      return;
-    }
-
-    // Demo Mode is always successful
-    if (state.scriptUrl === 'demo') {
-      showToast('Conexão Simulada com Sucesso no Modo Demo! 🎓', 'success');
       return;
     }
 
@@ -1033,15 +919,9 @@
     dom.testConnectionBtn.textContent = '🔗 Testar Conexão';
   }
 
-  // Update visual state connection indicator
   function updateConnectionStatus(connected) {
-    if (state.scriptUrl === 'demo') {
-      dom.statusDot.className = 'status-dot demo';
-      dom.statusText.textContent = 'Modo Demo';
-    } else {
-      dom.statusDot.className = `status-dot${connected ? ' connected' : ''}`;
-      dom.statusText.textContent = connected ? 'Conectado' : 'Desconectado';
-    }
+    dom.statusDot.className = `status-dot${connected ? ' connected' : ''}`;
+    dom.statusText.textContent = connected ? 'Conectado' : 'Desconectado';
   }
 
   async function generateIds() {
@@ -1060,7 +940,7 @@
         showToast(`${result.count} IDs gerados com sucesso! 🔑`, 'success');
         refreshData();
       } else {
-        showToast(result.message || 'Erro ao gerare IDs', 'error');
+        showToast(result.message || 'Erro ao gerar IDs', 'error');
       }
     } catch (err) {
       showToast('Erro de conexão: ' + err.message, 'error');
@@ -1071,7 +951,7 @@
   }
 
   function clearLocalData() {
-    if (confirm('Tem certeza que deseja limpar todos os dados locais? (Se estiver no modo demo, os dados originais serão recarregados)')) {
+    if (confirm('Tem certeza que deseja limpar todos os dados locais? (As configurações serão mantidas)')) {
       state.recentCheckins = [];
       state.participants = [];
       localStorage.removeItem(STORAGE_KEYS.recentCheckins);
@@ -1091,8 +971,6 @@
       `;
 
       showToast('Dados locais limpos com sucesso', 'success');
-      
-      // Reload config to restore demo mode state
       loadConfig();
       refreshData();
     }
