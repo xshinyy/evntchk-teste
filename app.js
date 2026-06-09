@@ -32,6 +32,9 @@
     currentCameraIndex: 0
   };
 
+  // Background sync interval
+  let autoRefreshInterval = null;
+
   // Default Mock Participants for Demo Mode
   const MOCK_PARTICIPANTS = [
     { name: 'Alice Silva', email: 'alice@example.com', institution: 'IFMS', id: 'EVT-ALICE123', status: 'absent', checkinDate: '' },
@@ -187,7 +190,7 @@
     });
 
     // Header actions
-    dom.refreshBtn.addEventListener('click', refreshData);
+    dom.refreshBtn.addEventListener('click', () => refreshData(false));
     dom.logoutBtn.addEventListener('click', handleLogout);
 
     // Scanner
@@ -230,6 +233,7 @@
       // Refresh / Load data
       updateConnectionStatus(state.scriptUrl !== 'demo');
       refreshData();
+      startAutoRefresh();
 
       if (state.scriptUrl === 'demo') {
         showToast('Modo de Demonstração ativado! 🎓', 'info');
@@ -250,6 +254,7 @@
   function handleLogout() {
     state.isAuthenticated = false;
     stopScanner();
+    stopAutoRefresh();
     dom.app.classList.add('hidden');
     dom.loginScreen.classList.remove('hidden');
     dom.passwordInput.value = '';
@@ -419,16 +424,18 @@
   // ============================================
   // DATA REFRESH
   // ============================================
-  async function refreshData() {
+  async function refreshData(silent = false) {
     if (!state.scriptUrl) {
-      showToast('Configure a URL do Apps Script nas configurações', 'warning');
+      if (!silent) showToast('Configure a URL do Apps Script nas configurações', 'warning');
       navigateTo('config');
       return;
     }
 
     try {
-      dom.refreshBtn.disabled = true;
-      dom.refreshBtn.textContent = '⏳';
+      if (!silent) {
+        dom.refreshBtn.disabled = true;
+        dom.refreshBtn.textContent = '⏳';
+      }
 
       const data = await apiGet('list');
 
@@ -444,105 +451,46 @@
           generateQRCards(state.participants);
         }
 
-        if (state.scriptUrl !== 'demo') {
+        if (state.scriptUrl !== 'demo' && !silent) {
           showToast('Dados atualizados com sucesso', 'success');
         }
       } else if (data.status === 'unauthorized') {
-        showToast('Senha do Apps Script incorreta', 'error');
+        if (!silent) showToast('Senha do Apps Script incorreta', 'error');
         updateConnectionStatus(false);
       } else {
-        showToast(data.message || 'Erro ao carregar dados', 'error');
+        if (!silent) showToast(data.message || 'Erro ao carregar dados', 'error');
       }
     } catch (err) {
       console.error('Refresh error:', err);
-      showToast('Erro de conexão. Verifique a URL e a internet.', 'error');
+      if (!silent) showToast('Erro de conexão. Verifique a URL e a internet.', 'error');
       updateConnectionStatus(false);
     } finally {
-      dom.refreshBtn.disabled = false;
-      dom.refreshBtn.textContent = '🔄';
-    }
-  }
-
-  // ============================================
-  // DASHBOARD
-  // ============================================
-  function updateDashboard(stats) {
-    if (!stats) return;
-
-    animateNumber(dom.statTotal, stats.total);
-    animateNumber(dom.statPresent, stats.present);
-    animateNumber(dom.statAbsent, stats.absent);
-    animateNumber(dom.statPercentage, stats.percentage, '%');
-  }
-
-  function animateNumber(element, target, suffix = '') {
-    const current = parseInt(element.textContent) || 0;
-    const diff = target - current;
-    const duration = 600;
-    const steps = 30;
-    const stepValue = diff / steps;
-    let step = 0;
-
-    if (diff === 0) {
-      element.textContent = target + suffix;
-      return;
-    }
-
-    const interval = setInterval(() => {
-      step++;
-      if (step >= steps) {
-        element.textContent = target + suffix;
-        clearInterval(interval);
-      } else {
-        element.textContent = Math.round(current + stepValue * step) + suffix;
+      if (!silent) {
+        dom.refreshBtn.disabled = false;
+        dom.refreshBtn.textContent = '🔄';
       }
-    }, duration / steps);
+    }
   }
 
-  function updateRecentList() {
-    const presentParticipants = state.participants
-      .filter(p => p.status === 'present' && p.checkinDate)
-      .sort((a, b) => {
-        return parseDate(b.checkinDate) - parseDate(a.checkinDate);
-      })
-      .slice(0, 20);
-
-    if (presentParticipants.length === 0) {
-      dom.emptyRecent.classList.remove('hidden');
-      dom.recentCount.textContent = '0 hoje';
-      const items = dom.recentList.querySelectorAll('.recent-item');
-      items.forEach(item => item.remove());
-      return;
-    }
-
-    dom.emptyRecent.classList.add('hidden');
-    dom.recentCount.textContent = `${presentParticipants.length} registrados`;
-
-    const items = dom.recentList.querySelectorAll('.recent-item');
-    items.forEach(item => item.remove());
-
-    presentParticipants.forEach((p, index) => {
-      const item = document.createElement('div');
-      item.className = 'recent-item';
-      item.style.animationDelay = `${index * 0.05}s`;
-      item.innerHTML = `
-        <div class="check-icon">✅</div>
-        <div class="item-info">
-          <div class="item-name">${escapeHtml(p.name)}</div>
-          <div class="item-time">${p.checkinDate || 'Horário não registrado'}</div>
-        </div>
-      `;
-      dom.recentList.appendChild(item);
-    });
+  // ============================================
+  // BACKGROUND AUTO-REFRESH TIMER
+  // ============================================
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    // Auto-refresh every 8 seconds to synchronize PCs and scanning phones in real-time
+    autoRefreshInterval = setInterval(() => {
+      // Only auto-sync if logged in, tab is visible, and camera isn't active
+      if (state.isAuthenticated && !state.isScanning && document.visibilityState === 'visible') {
+        refreshData(true); // Silent refresh
+      }
+    }, 8000);
   }
 
-  function parseDate(dateStr) {
-    if (!dateStr) return 0;
-    const parts = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s*(\d{2}):(\d{2}):?(\d{2})?/);
-    if (parts) {
-      return new Date(parts[3], parts[2] - 1, parts[1], parts[4], parts[5], parts[6] || 0).getTime();
+  function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      autoRefreshInterval = null;
     }
-    return 0;
   }
 
   // ============================================
@@ -787,6 +735,54 @@
     }, 2500);
   }
 
+  function showScanResult(type, icon, name, message) {
+    dom.scanResult.className = `scan-result visible ${type}`;
+    dom.resultIcon.textContent = icon;
+    dom.resultName.textContent = name;
+    dom.resultMessage.textContent = message;
+
+    clearTimeout(state.resultTimeout);
+    state.resultTimeout = setTimeout(() => {
+      dom.scanResult.classList.remove('visible');
+    }, 4000);
+  }
+
+  function addToRecentCheckins(name) {
+    const checkin = {
+      name: name,
+      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    };
+
+    state.recentCheckins.unshift(checkin);
+    if (state.recentCheckins.length > 50) {
+      state.recentCheckins = state.recentCheckins.slice(0, 50);
+    }
+
+    localStorage.setItem(STORAGE_KEYS.recentCheckins, JSON.stringify(state.recentCheckins));
+
+    refreshData(true); // silent refresh to update dashboard values instantly
+  }
+
+  async function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const result = await Html5Qrcode.scanFile(file, true);
+
+      if (result) {
+        await onScanSuccess(result);
+      } else {
+        showToast('QR Code não encontrado na imagem', 'error');
+      }
+    } catch (err) {
+      console.error('File scan error:', err);
+      showToast('Não foi possível ler o QR Code da imagem', 'error');
+    }
+
+    event.target.value = '';
+  }
+
   // ============================================
   // QR CODE GENERATION
   // ============================================
@@ -924,6 +920,7 @@
     dom.qrModal.classList.remove('hidden');
   }
 
+  // Close QR code modal
   function closeModal() {
     dom.qrModal.classList.add('hidden');
   }
@@ -1036,6 +1033,7 @@
     dom.testConnectionBtn.textContent = '🔗 Testar Conexão';
   }
 
+  // Update visual state connection indicator
   function updateConnectionStatus(connected) {
     if (state.scriptUrl === 'demo') {
       dom.statusDot.className = 'status-dot demo';
@@ -1062,7 +1060,7 @@
         showToast(`${result.count} IDs gerados com sucesso! 🔑`, 'success');
         refreshData();
       } else {
-        showToast(result.message || 'Erro ao gerar IDs', 'error');
+        showToast(result.message || 'Erro ao gerare IDs', 'error');
       }
     } catch (err) {
       showToast('Erro de conexão: ' + err.message, 'error');
