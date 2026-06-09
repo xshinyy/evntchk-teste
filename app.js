@@ -20,8 +20,8 @@
 
   let state = {
     isAuthenticated: false,
-    scriptUrl: '',
-    eventName: '',
+    scriptUrl: 'demo',
+    eventName: 'Evento de Demonstração 🎓',
     participants: [],
     recentCheckins: [],
     scanner: null,
@@ -31,6 +31,15 @@
     cameras: [],
     currentCameraIndex: 0
   };
+
+  // Default Mock Participants for Demo Mode
+  const MOCK_PARTICIPANTS = [
+    { name: 'Alice Silva', email: 'alice@example.com', institution: 'IFMS', id: 'EVT-ALICE123', status: 'absent', checkinDate: '' },
+    { name: 'Bruno Santos', email: 'bruno@example.com', institution: 'IFMS', id: 'EVT-BRUNO456', status: 'absent', checkinDate: '' },
+    { name: 'Carla Souza', email: 'carla@example.com', institution: 'USP', id: 'EVT-CARLA789', status: 'present', checkinDate: '08/06/2026 21:00:00' },
+    { name: 'Diego Lima', email: 'diego@example.com', institution: 'UNICAMP', id: 'EVT-DIEGO012', status: 'absent', checkinDate: '' },
+    { name: 'Elisa Ferreira', email: 'elisa@example.com', institution: 'UFRJ', id: 'EVT-ELISA345', status: 'present', checkinDate: '08/06/2026 20:30:15' }
+  ];
 
   // ============================================
   // DOM ELEMENTS
@@ -131,17 +140,30 @@
   }
 
   function loadConfig() {
-    state.scriptUrl = localStorage.getItem(STORAGE_KEYS.scriptUrl) || '';
-    state.eventName = localStorage.getItem(STORAGE_KEYS.eventName) || '';
+    state.scriptUrl = localStorage.getItem(STORAGE_KEYS.scriptUrl) || 'demo';
+    state.eventName = localStorage.getItem(STORAGE_KEYS.eventName) || (state.scriptUrl === 'demo' ? 'Evento de Demonstração 🎓' : 'Configurar Evento');
     state.recentCheckins = JSON.parse(localStorage.getItem(STORAGE_KEYS.recentCheckins) || '[]');
+    
+    // Load participants from storage
+    state.participants = JSON.parse(localStorage.getItem(STORAGE_KEYS.participants) || '[]');
+
+    // Initialize mock participants if in demo mode and list is empty
+    if (state.scriptUrl === 'demo' && state.participants.length === 0) {
+      state.participants = [...MOCK_PARTICIPANTS];
+      localStorage.setItem(STORAGE_KEYS.participants, JSON.stringify(state.participants));
+    }
 
     if (state.eventName) {
       dom.configEventName.value = state.eventName;
       dom.headerEventName.textContent = state.eventName;
     }
+    
+    // Show URL empty in config input if it is just the local 'demo' keyword
     if (state.scriptUrl) {
-      dom.configScriptUrl.value = state.scriptUrl;
+      dom.configScriptUrl.value = state.scriptUrl === 'demo' ? '' : state.scriptUrl;
     }
+    
+    updateConnectionStatus(state.scriptUrl !== 'demo');
   }
 
   function registerServiceWorker() {
@@ -205,13 +227,15 @@
       dom.app.classList.remove('hidden');
       dom.loginError.classList.remove('visible');
 
-      // Load data if configured
-      if (state.scriptUrl) {
-        updateConnectionStatus(true);
-        refreshData();
-      }
+      // Refresh / Load data
+      updateConnectionStatus(state.scriptUrl !== 'demo');
+      refreshData();
 
-      showToast('Bem-vindo ao EventCheck! 🎓', 'success');
+      if (state.scriptUrl === 'demo') {
+        showToast('Modo de Demonstração ativado! 🎓', 'info');
+      } else {
+        showToast('Bem-vindo ao EventCheck! 🎓', 'success');
+      }
     } else {
       dom.loginError.classList.add('visible');
       dom.passwordInput.value = '';
@@ -258,13 +282,35 @@
     });
   }
 
+  // Helper to calculate statistics
+  function calculateStats(participants) {
+    const total = participants.length;
+    const present = participants.filter(p => p.status === 'present').length;
+    const absent = total - present;
+    const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+    return { total, present, absent, percentage };
+  }
+
   // ============================================
-  // API COMMUNICATION
+  // API COMMUNICATION (WITH DEMO BACKEND SIMULATION)
   // ============================================
   async function apiGet(action) {
     if (!state.scriptUrl) {
       showToast('Configure a URL do Apps Script primeiro', 'warning');
       throw new Error('No script URL configured');
+    }
+
+    // Simulation for local Demo Mode
+    if (state.scriptUrl === 'demo') {
+      await new Promise(resolve => setTimeout(resolve, 300)); // Simulate response latency
+      if (action === 'list' || action === 'stats') {
+        return {
+          status: 'success',
+          participants: state.participants,
+          stats: calculateStats(state.participants)
+        };
+      }
+      return { status: 'error', message: 'Ação desconhecida: ' + action };
     }
 
     const url = `${state.scriptUrl}?action=${action}&password=${encodeURIComponent(APP_PASSWORD)}&t=${Date.now()}`;
@@ -285,6 +331,67 @@
     if (!state.scriptUrl) {
       showToast('Configure a URL do Apps Script primeiro', 'warning');
       throw new Error('No script URL configured');
+    }
+
+    // Simulation for local Demo Mode
+    if (state.scriptUrl === 'demo') {
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate response latency
+      const action = data.action || '';
+      
+      if (action === 'checkin') {
+        const participantId = data.id.toString().trim();
+        const index = state.participants.findIndex(p => p.id && p.id.toString().trim() === participantId);
+
+        if (index > -1) {
+          const p = state.participants[index];
+          if (p.status === 'present') {
+            return {
+              status: 'already_checked_in',
+              name: p.name,
+              message: `Participante já registrado em ${p.checkinDate}`
+            };
+          }
+
+          // Register presence locally
+          const now = new Date();
+          const formattedDate = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR');
+          p.status = 'present';
+          p.checkinDate = formattedDate;
+
+          localStorage.setItem(STORAGE_KEYS.participants, JSON.stringify(state.participants));
+
+          return {
+            status: 'success',
+            name: p.name,
+            message: `Check-in registrado com sucesso às ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+          };
+        }
+
+        return {
+          status: 'not_found',
+          message: 'Participante não encontrado. ID: ' + participantId
+        };
+      }
+
+      if (action === 'generate_ids') {
+        let count = 0;
+        state.participants.forEach(p => {
+          if (!p.id) {
+            p.id = 'EVT-' + Math.random().toString(36).substr(2, 8).toUpperCase();
+            count++;
+          }
+        });
+        if (count > 0) {
+          localStorage.setItem(STORAGE_KEYS.participants, JSON.stringify(state.participants));
+        }
+        return {
+          status: 'success',
+          count: count,
+          message: `${count} IDs gerados com sucesso`
+        };
+      }
+
+      return { status: 'error', message: 'Ação desconhecida: ' + action };
     }
 
     const response = await fetch(state.scriptUrl, {
@@ -323,9 +430,12 @@
       if (data.status === 'success') {
         state.participants = data.participants || [];
         updateDashboard(data.stats);
-        updateConnectionStatus(true);
+        updateConnectionStatus(state.scriptUrl !== 'demo');
         updateRecentList();
-        showToast('Dados atualizados com sucesso', 'success');
+        
+        if (state.scriptUrl !== 'demo') {
+          showToast('Dados atualizados com sucesso', 'success');
+        }
       } else if (data.status === 'unauthorized') {
         showToast('Senha do Apps Script incorreta', 'error');
         updateConnectionStatus(false);
@@ -557,7 +667,7 @@
     return false;
   }
 
-  // Lógica para alternar ciclicamente entre as câmeras detectadas
+  // Toggle between all detected cameras
   async function switchCamera() {
     if (!state.scanner || !state.isScanning || state.cameras.length <= 1) return;
 
@@ -566,10 +676,8 @@
     dom.switchCameraBtn.textContent = '🔄 Trocando...';
 
     try {
-      // Para o scanner atual
       await state.scanner.stop();
 
-      // Avança para o próximo índice
       state.currentCameraIndex = (state.currentCameraIndex + 1) % state.cameras.length;
       const nextCamera = state.cameras[state.currentCameraIndex];
 
@@ -582,7 +690,6 @@
         disableFlip: false
       };
 
-      // Inicia a nova câmera
       await state.scanner.start(
         nextCamera.id,
         config,
@@ -594,7 +701,7 @@
     } catch (err) {
       console.error('Erro ao alternar câmera:', err);
       showToast('Falha ao trocar de câmera. Tentando reiniciar...', 'error');
-      await startScanner(); // Tenta reiniciar com fluxo padrão
+      await startScanner();
     } finally {
       dom.switchCameraBtn.disabled = false;
       dom.switchCameraBtn.textContent = originalText;
@@ -881,8 +988,24 @@
     const eventName = dom.configEventName.value.trim();
     const scriptUrl = dom.configScriptUrl.value.trim();
 
+    // Revert to Demo Mode if user clears the URL input
     if (!scriptUrl) {
-      showToast('Preencha a URL do Google Apps Script', 'warning');
+      state.eventName = eventName || 'Evento de Demonstração 🎓';
+      state.scriptUrl = 'demo';
+      localStorage.setItem(STORAGE_KEYS.eventName, state.eventName);
+      localStorage.setItem(STORAGE_KEYS.scriptUrl, 'demo');
+      
+      // Reset local participants list to mock values
+      state.participants = [...MOCK_PARTICIPANTS];
+      localStorage.setItem(STORAGE_KEYS.participants, JSON.stringify(state.participants));
+      state.recentCheckins = [];
+      localStorage.setItem(STORAGE_KEYS.recentCheckins, JSON.stringify(state.recentCheckins));
+
+      dom.headerEventName.textContent = state.eventName;
+      updateConnectionStatus(false);
+      
+      showToast('Modo de Demonstração ativado! 🎓', 'info');
+      refreshData();
       return;
     }
 
@@ -900,11 +1023,18 @@
     dom.headerEventName.textContent = eventName || 'EventCheck';
 
     showToast('Configurações salvas com sucesso! ✅', 'success');
+    refreshData();
   }
 
   async function testConnection() {
     if (!state.scriptUrl) {
       showToast('Salve a URL do script primeiro', 'warning');
+      return;
+    }
+
+    // Demo Mode is always successful
+    if (state.scriptUrl === 'demo') {
+      showToast('Conexão Simulada com Sucesso no Modo Demo! 🎓', 'success');
       return;
     }
 
@@ -944,8 +1074,13 @@
   }
 
   function updateConnectionStatus(connected) {
-    dom.statusDot.className = `status-dot${connected ? ' connected' : ''}`;
-    dom.statusText.textContent = connected ? 'Conectado' : 'Desconectado';
+    if (state.scriptUrl === 'demo') {
+      dom.statusDot.className = 'status-dot demo';
+      dom.statusText.textContent = 'Modo Demo';
+    } else {
+      dom.statusDot.className = `status-dot${connected ? ' connected' : ''}`;
+      dom.statusText.textContent = connected ? 'Conectado' : 'Desconectado';
+    }
   }
 
   async function generateIds() {
@@ -962,6 +1097,7 @@
 
       if (result.status === 'success') {
         showToast(`${result.count} IDs gerados com sucesso! 🔑`, 'success');
+        refreshData();
       } else {
         showToast(result.message || 'Erro ao gerar IDs', 'error');
       }
@@ -974,7 +1110,7 @@
   }
 
   function clearLocalData() {
-    if (confirm('Tem certeza que deseja limpar todos os dados locais? (As configurações serão mantidas)')) {
+    if (confirm('Tem certeza que deseja limpar todos os dados locais? (Se estiver no modo demo, os dados originais serão recarregados)')) {
       state.recentCheckins = [];
       state.participants = [];
       localStorage.removeItem(STORAGE_KEYS.recentCheckins);
@@ -994,6 +1130,10 @@
       `;
 
       showToast('Dados locais limpos com sucesso', 'success');
+      
+      // Reload config to restore demo mode state
+      loadConfig();
+      refreshData();
     }
   }
 

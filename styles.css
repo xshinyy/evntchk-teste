@@ -463,6 +463,12 @@ input, button, textarea, select {
   animation: pulse-dot 2s infinite;
 }
 
+.status-dot.demo {
+  background: var(--warning);
+  box-shadow: 0 0 8px rgba(255, 171, 0, 0.5);
+  animation: pulse-dot 2s infinite;
+}
+
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
