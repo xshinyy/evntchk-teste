@@ -26,7 +26,10 @@
     recentCheckins: [],
     scanner: null,
     isScanning: false,
-    scanCooldown: false
+    scanCooldown: false,
+    resultTimeout: null,
+    cameras: [],
+    currentCameraIndex: 0
   };
 
   // ============================================
@@ -63,6 +66,7 @@
     scannerViewport: $('#scanner-viewport'),
     scannerPlaceholder: $('#scanner-placeholder'),
     startScanBtn: $('#start-scan-btn'),
+    switchCameraBtn: $('#switch-camera-btn'),
     stopScanBtn: $('#stop-scan-btn'),
     scanResult: $('#scan-result'),
     resultIcon: $('#result-icon'),
@@ -166,6 +170,7 @@
 
     // Scanner
     dom.startScanBtn.addEventListener('click', startScanner);
+    dom.switchCameraBtn.addEventListener('click', switchCamera);
     dom.stopScanBtn.addEventListener('click', stopScanner);
     dom.qrFileInput.addEventListener('change', handleFileUpload);
 
@@ -374,11 +379,9 @@
   }
 
   function updateRecentList() {
-    // Merge server data with local recent check-ins
     const presentParticipants = state.participants
       .filter(p => p.status === 'present' && p.checkinDate)
       .sort((a, b) => {
-        // Sort by check-in date descending (most recent first)
         return parseDate(b.checkinDate) - parseDate(a.checkinDate);
       })
       .slice(0, 20);
@@ -386,7 +389,6 @@
     if (presentParticipants.length === 0) {
       dom.emptyRecent.classList.remove('hidden');
       dom.recentCount.textContent = '0 hoje';
-      // Clear previous items except empty state
       const items = dom.recentList.querySelectorAll('.recent-item');
       items.forEach(item => item.remove());
       return;
@@ -395,7 +397,6 @@
     dom.emptyRecent.classList.add('hidden');
     dom.recentCount.textContent = `${presentParticipants.length} registrados`;
 
-    // Clear previous items
     const items = dom.recentList.querySelectorAll('.recent-item');
     items.forEach(item => item.remove());
 
@@ -416,7 +417,6 @@
 
   function parseDate(dateStr) {
     if (!dateStr) return 0;
-    // Format: dd/MM/yyyy HH:mm:ss
     const parts = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s*(\d{2}):(\d{2}):?(\d{2})?/);
     if (parts) {
       return new Date(parts[3], parts[2] - 1, parts[1], parts[4], parts[5], parts[6] || 0).getTime();
@@ -436,28 +436,62 @@
 
       state.scanner = new Html5Qrcode('scanner-view');
 
-      // Detect mobile devices for adaptive configuration
-      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
-
-      // Calculate a safe fixed qrbox size — avoids timing issues on mobile
-      // where the container may not yet have computed dimensions
-      const containerW = dom.scannerViewport.offsetWidth || Math.min(window.innerWidth, 400);
-      const qrboxSize = Math.max(200, Math.floor(containerW * 0.70));
-
-      const config = {
-        fps: isMobile ? 15 : 10,
-        // Fixed size is more reliable than a callback on mobile
-        qrbox: { width: qrboxSize, height: qrboxSize },
-        // aspectRatio: 1.0 removed — causes camera stream failures on mobile browsers
-        disableFlip: false,
-        experimentalFeatures: {
-          // BarcodeDetector API is unstable on many Android devices; disable on mobile
-          useBarCodeDetectorIfSupported: !isMobile
+      // Detect and list all available cameras
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          // Prioritize rear cameras to find the correct focus lenses
+          const backCams = devices.filter(d => /back|rear|trás|environment/i.test(d.label));
+          const frontCams = devices.filter(d => !/back|rear|trás|environment/i.test(d.label));
+          state.cameras = [...backCams, ...frontCams];
+        } else {
+          state.cameras = [];
         }
+      } catch (camErr) {
+        console.warn('Erro ao listar câmeras:', camErr);
+        state.cameras = [];
+      }
+
+      // Show/hide camera toggle button
+      if (state.cameras.length > 1) {
+        dom.switchCameraBtn.classList.remove('hidden');
+      } else {
+        dom.switchCameraBtn.classList.add('hidden');
+      }
+
+      // Scanner configuration with a dynamic qrbox size (70% of video dimensions)
+      const config = {
+        fps: 15,
+        qrbox: function(width, height) {
+          const size = Math.min(width, height) * 0.70;
+          return { width: Math.floor(size), height: Math.floor(size) };
+        },
+        disableFlip: false
       };
 
-      // Three-tier camera start strategy for maximum mobile compatibility
-      const started = await _startCameraWithFallback(config);
+      state.currentCameraIndex = 0;
+      let started = false;
+
+      // Try starting with the first prioritized camera
+      if (state.cameras.length > 0) {
+        try {
+          await state.scanner.start(
+            state.cameras[0].id,
+            config,
+            onScanSuccess,
+            () => {}
+          );
+          started = true;
+        } catch (e) {
+          console.warn('Falha ao iniciar primeira câmera da lista. Tentando fallback...', e);
+        }
+      }
+
+      // Fallback strategy if specific camera start failed
+      if (!started) {
+        started = await _startCameraWithFallback(config);
+      }
+
       if (!started) throw new Error('Nenhuma câmera compatível encontrada.');
 
       state.isScanning = true;
@@ -477,12 +511,16 @@
     }
   }
 
-  // Tries multiple camera constraint strategies; returns true on success.
+  // Tries multiple standard facingMode constraint strategies with high-definition resolution constraints
   async function _startCameraWithFallback(config) {
-    // Strategy 1: Exact environment camera with ideal resolution
+    // Strategy 1: HD resolution constraints on exact environment camera
     try {
       await state.scanner.start(
-        { facingMode: { exact: 'environment' } },
+        { 
+          facingMode: { exact: 'environment' },
+          width: { min: 640, ideal: 1280, max: 1920 },
+          height: { min: 480, ideal: 720, max: 1080 }
+        },
         config, onScanSuccess, () => {}
       );
       return true;
@@ -490,10 +528,14 @@
       console.warn('Camera strategy 1 failed:', e1.message || e1);
     }
 
-    // Strategy 2: Non-exact environment (lets browser pick closest match)
+    // Strategy 2: HD resolution constraints on standard environment camera
     try {
       await state.scanner.start(
-        { facingMode: 'environment' },
+        { 
+          facingMode: 'environment',
+          width: { min: 640, ideal: 1280, max: 1920 },
+          height: { min: 480, ideal: 720, max: 1080 }
+        },
         config, onScanSuccess, () => {}
       );
       return true;
@@ -501,22 +543,62 @@
       console.warn('Camera strategy 2 failed:', e2.message || e2);
     }
 
-    // Strategy 3: Enumerate cameras and pick the rear-facing one by label
+    // Strategy 3: Standard camera constraints (browser defaults)
     try {
-      const cameras = await Html5Qrcode.getCameras();
-      if (cameras && cameras.length > 0) {
-        const backCam = cameras.find(c => /back|rear|trás|environment/i.test(c.label))
-          || cameras[cameras.length - 1]; // Last device is usually rear on Android
-        await state.scanner.start(
-          backCam.id, config, onScanSuccess, () => {}
-        );
-        return true;
-      }
+      await state.scanner.start(
+        { facingMode: 'environment' },
+        config, onScanSuccess, () => {}
+      );
+      return true;
     } catch (e3) {
       console.warn('Camera strategy 3 failed:', e3.message || e3);
     }
 
     return false;
+  }
+
+  // Lógica para alternar ciclicamente entre as câmeras detectadas
+  async function switchCamera() {
+    if (!state.scanner || !state.isScanning || state.cameras.length <= 1) return;
+
+    dom.switchCameraBtn.disabled = true;
+    const originalText = dom.switchCameraBtn.textContent;
+    dom.switchCameraBtn.textContent = '🔄 Trocando...';
+
+    try {
+      // Para o scanner atual
+      await state.scanner.stop();
+
+      // Avança para o próximo índice
+      state.currentCameraIndex = (state.currentCameraIndex + 1) % state.cameras.length;
+      const nextCamera = state.cameras[state.currentCameraIndex];
+
+      const config = {
+        fps: 15,
+        qrbox: function(width, height) {
+          const size = Math.min(width, height) * 0.70;
+          return { width: Math.floor(size), height: Math.floor(size) };
+        },
+        disableFlip: false
+      };
+
+      // Inicia a nova câmera
+      await state.scanner.start(
+        nextCamera.id,
+        config,
+        onScanSuccess,
+        () => {}
+      );
+
+      showToast(`Câmera alterada para: ${nextCamera.label || 'Câmera ' + (state.currentCameraIndex + 1)}`, 'info');
+    } catch (err) {
+      console.error('Erro ao alternar câmera:', err);
+      showToast('Falha ao trocar de câmera. Tentando reiniciar...', 'error');
+      await startScanner(); // Tenta reiniciar com fluxo padrão
+    } finally {
+      dom.switchCameraBtn.disabled = false;
+      dom.switchCameraBtn.textContent = originalText;
+    }
   }
 
   async function stopScanner() {
@@ -534,6 +616,7 @@
 
   function resetScannerUI() {
     dom.startScanBtn.classList.remove('hidden');
+    dom.switchCameraBtn.classList.add('hidden');
     dom.stopScanBtn.classList.add('hidden');
     dom.scannerPlaceholder.classList.remove('hidden');
     dom.scannerViewport.classList.remove('scanning');
@@ -541,16 +624,13 @@
   }
 
   async function onScanSuccess(decodedText) {
-    // Prevent rapid duplicate scans
     if (state.scanCooldown) return;
     state.scanCooldown = true;
 
-    // Vibrate feedback
     if (navigator.vibrate) {
       navigator.vibrate(100);
     }
 
-    // Play scan sound
     playBeep(true);
 
     try {
@@ -584,7 +664,6 @@
       playBeep(false);
     }
 
-    // Reset cooldown after delay
     setTimeout(() => {
       state.scanCooldown = false;
     }, 2500);
@@ -596,7 +675,6 @@
     dom.resultName.textContent = name;
     dom.resultMessage.textContent = message;
 
-    // Auto-hide after 4 seconds
     clearTimeout(state.resultTimeout);
     state.resultTimeout = setTimeout(() => {
       dom.scanResult.classList.remove('visible');
@@ -616,24 +694,14 @@
 
     localStorage.setItem(STORAGE_KEYS.recentCheckins, JSON.stringify(state.recentCheckins));
 
-    // Refresh dashboard data in background
     refreshData();
   }
 
-  // File upload fallback for QR scanning
   async function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
     try {
-      const scanner = new Html5Qrcode('scanner-view-temp-' + Date.now());
-
-      // Create temporary div
-      const tempDiv = document.createElement('div');
-      tempDiv.id = scanner._elementId || 'temp-scan';
-      tempDiv.style.display = 'none';
-      document.body.appendChild(tempDiv);
-
       const result = await Html5Qrcode.scanFile(file, true);
 
       if (result) {
@@ -641,14 +709,11 @@
       } else {
         showToast('QR Code não encontrado na imagem', 'error');
       }
-
-      tempDiv.remove();
     } catch (err) {
       console.error('File scan error:', err);
       showToast('Não foi possível ler o QR Code da imagem', 'error');
     }
 
-    // Reset file input
     event.target.value = '';
   }
 
@@ -685,7 +750,6 @@
   }
 
   function generateQRCards(participants) {
-    // Clear grid
     dom.qrGrid.innerHTML = '';
 
     if (!participants || participants.length === 0) {
@@ -733,7 +797,6 @@
         card.appendChild(emailEl);
       }
 
-      // Generate QR code
       try {
         new QRCode(qrDiv, {
           text: participant.id,
@@ -748,7 +811,6 @@
         qrDiv.innerHTML = '<p style="padding: 20px; font-size: 0.75rem; color: var(--error);">Erro ao gerar QR</p>';
       }
 
-      // Click to expand
       card.addEventListener('click', () => openQRModal(participant));
 
       dom.qrGrid.appendChild(card);
@@ -775,7 +837,6 @@
     dom.modalEmail.textContent = participant.email || participant.institution || '';
     dom.modalQrContainer.innerHTML = '';
 
-    // Generate larger QR code
     try {
       new QRCode(dom.modalQrContainer, {
         text: participant.id,
@@ -919,14 +980,12 @@
       localStorage.removeItem(STORAGE_KEYS.recentCheckins);
       localStorage.removeItem(STORAGE_KEYS.participants);
 
-      // Reset dashboard
       dom.statTotal.textContent = '—';
       dom.statPresent.textContent = '—';
       dom.statAbsent.textContent = '—';
       dom.statPercentage.textContent = '—';
       updateRecentList();
 
-      // Reset QR grid
       dom.qrGrid.innerHTML = `
         <div class="empty-state" id="empty-qr">
           <div class="empty-icon">📱</div>
@@ -951,15 +1010,13 @@
       gainNode.connect(ctx.destination);
 
       if (success) {
-        // Pleasant ascending tone
-        oscillator.frequency.setValueAtTime(587, ctx.currentTime); // D5
-        oscillator.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+        oscillator.frequency.setValueAtTime(587, ctx.currentTime);
+        oscillator.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
         gainNode.gain.setValueAtTime(0.15, ctx.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
         oscillator.start(ctx.currentTime);
         oscillator.stop(ctx.currentTime + 0.25);
       } else {
-        // Low warning tone
         oscillator.frequency.setValueAtTime(330, ctx.currentTime);
         oscillator.frequency.setValueAtTime(220, ctx.currentTime + 0.15);
         gainNode.gain.setValueAtTime(0.12, ctx.currentTime);
@@ -968,7 +1025,7 @@
         oscillator.stop(ctx.currentTime + 0.3);
       }
     } catch (err) {
-      // Audio not supported — silent fallback
+      // Audio not supported
     }
   }
 
@@ -989,7 +1046,6 @@
     toast.innerHTML = `<span>${icons[type] || ''}</span><span>${escapeHtml(message)}</span>`;
     dom.toastContainer.appendChild(toast);
 
-    // Auto remove
     setTimeout(() => {
       toast.classList.add('removing');
       setTimeout(() => toast.remove(), 300);
