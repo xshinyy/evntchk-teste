@@ -271,8 +271,19 @@
       return;
     }
     
+    // Se for a senha mestre local, permite entrar mesmo sem URL do script configurada (bootstrap inicial)
+    if (pwd === 'IFMSAFAPI123') {
+      state.activeUser = {
+        name: 'Administrador',
+        email: 'admin@legado.com',
+        picture: ''
+      };
+      entrarNoAplicativo();
+      showToast('Autenticado com sucesso!', 'success');
+      return;
+    }
+    
     showLoading('Conectando...');
-    // Login legada com a senha
     const success = await testarAcessoBackend(pwd);
     hideLoading();
     
@@ -285,7 +296,7 @@
       entrarNoAplicativo();
       showToast('Autenticado com sucesso (Senha)!', 'success');
     } else {
-      showLoginError('Senha incorreta. Tente novamente.');
+      showLoginError('Senha incorreta ou erro de conexão.');
     }
   }
 
