@@ -1538,6 +1538,7 @@
       card.addEventListener('mouseleave', () => {
         card.style.transform = '';
       });
+    });
   }
 
   function initTheatre() {
