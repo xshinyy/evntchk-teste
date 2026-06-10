@@ -10,6 +10,7 @@
   // ============================================
   // CONFIGURATION & STATE
   // ============================================
+  const APP_VERSION = 'v1.3.3';
   const APP_PASSWORD = 'IFMSAFAPI123';
   const STORAGE_KEYS = {
     scriptUrl: 'eventcheck_script_url',
@@ -113,7 +114,11 @@
 
     // Loading
     loadingOverlay: $('#loading-overlay'),
-    loadingText: $('#loading-text')
+    loadingText: $('#loading-text'),
+    appVersion: $('#app-version'),
+    manualSearchInput: $('#manual-search-input'),
+    manualSearchResults: $('#manual-search-results'),
+    refreshTimer: $('#auto-refresh-timer')
   };
 
   // ============================================
@@ -123,6 +128,11 @@
     loadConfig();
     bindEvents();
     registerServiceWorker();
+
+    // Set app version text
+    if (dom.appVersion) {
+      dom.appVersion.textContent = APP_VERSION;
+    }
 
     // Handle Enter key on password input
     dom.passwordInput.addEventListener('keydown', (e) => {
@@ -182,6 +192,9 @@
     dom.switchCameraBtn.addEventListener('click', switchCamera);
     dom.stopScanBtn.addEventListener('click', stopScanner);
     dom.qrFileInput.addEventListener('change', handleFileUpload);
+    if (dom.manualSearchInput) {
+      dom.manualSearchInput.addEventListener('input', handleManualSearch);
+    }
 
     // QR Codes
     dom.loadQrBtn.addEventListener('click', loadAndGenerateQRCodes);
@@ -465,21 +478,52 @@
   // ============================================
   // BACKGROUND AUTO-REFRESH TIMER
   // ============================================
+  let refreshTimerInterval = null;
+  let secondsRemaining = 8;
+
   function startAutoRefresh() {
     stopAutoRefresh();
-    // Auto-refresh every 8 seconds to synchronize PCs and scanning phones in real-time
-    autoRefreshInterval = setInterval(() => {
-      // Only auto-sync if logged in, tab is visible, camera isn't active, and a scriptUrl is set
-      if (state.isAuthenticated && !state.isScanning && state.scriptUrl && document.visibilityState === 'visible') {
-        refreshData(true); // Silent refresh
+    secondsRemaining = 8;
+    updateRefreshTimerUI();
+
+    refreshTimerInterval = setInterval(() => {
+      if (state.isAuthenticated && document.visibilityState === 'visible') {
+        if (state.isScanning) {
+          dom.refreshTimer.textContent = ' (Scanner ativo)';
+          return;
+        }
+
+        secondsRemaining--;
+        if (secondsRemaining <= 0) {
+          dom.refreshTimer.textContent = ' (Sincronizando...)';
+          refreshData(true);
+          secondsRemaining = 8;
+        } else {
+          updateRefreshTimerUI();
+        }
+      } else {
+        dom.refreshTimer.textContent = '';
       }
-    }, 8000);
+    }, 1000);
   }
 
   function stopAutoRefresh() {
-    if (autoRefreshInterval) {
-      clearInterval(autoRefreshInterval);
-      autoRefreshInterval = null;
+    if (refreshTimerInterval) {
+      clearInterval(refreshTimerInterval);
+      refreshTimerInterval = null;
+    }
+    if (dom.refreshTimer) {
+      dom.refreshTimer.textContent = '';
+    }
+  }
+
+  function updateRefreshTimerUI() {
+    if (dom.refreshTimer) {
+      if (state.scriptUrl) {
+        dom.refreshTimer.textContent = ` (Auto-sync em ${secondsRemaining}s)`;
+      } else {
+        dom.refreshTimer.textContent = '';
+      }
     }
   }
 
@@ -495,14 +539,68 @@
 
       state.scanner = new Html5Qrcode('scanner-view');
 
-      // Detect and list all available cameras
+      // Request permission silently beforehand to populate camera labels immediately
       try {
-        const devices = await Html5Qrcode.getCameras();
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'environment' } 
+        });
+        stream.getTracks().forEach(track => track.stop());
+      } catch (err) {
+        console.warn('Erro ao pré-solicitar câmera traseira, tentando padrão:', err);
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          stream.getTracks().forEach(track => track.stop());
+        } catch (err2) {
+          console.warn('Erro ao pré-solicitar câmera padrão:', err2);
+        }
+      }
+
+      // Detect and list all available cameras (with a retry if labels are missing)
+      let devices = [];
+      let hasLabels = false;
+      try {
+        devices = await Html5Qrcode.getCameras();
+        hasLabels = devices.some(d => d.label);
+        
+        if (!hasLabels && devices.length > 0) {
+          console.log('Labels não encontradas de primeira. Aguardando 200ms para tentar novamente...');
+          await new Promise(resolve => setTimeout(resolve, 200));
+          devices = await Html5Qrcode.getCameras();
+          hasLabels = devices.some(d => d.label);
+        }
+
         if (devices && devices.length > 0) {
-          // Prioritize rear cameras to find the correct focus lenses
-          const backCams = devices.filter(d => /back|rear|trás|environment/i.test(d.label));
-          const frontCams = devices.filter(d => !/back|rear|trás|environment/i.test(d.label));
-          state.cameras = [...backCams, ...frontCams];
+          let backCams = [];
+          let frontCams = [];
+
+          devices.forEach(d => {
+            const label = (d.label || '').toLowerCase();
+            const isFront = /front|user|frontal|selfie|face|interna|internal|webcam/i.test(label);
+            const isBack = /back|rear|trás|traseira|environment/i.test(label);
+            
+            if (label) {
+              if (isBack && !isFront) {
+                backCams.push(d);
+              } else if (isFront && !isBack) {
+                frontCams.push(d);
+              } else {
+                // If it has a label but matches neither, treat as rear/back
+                backCams.push(d);
+              }
+            } else {
+              // No label (fallback should not happen after warmup, but keep for safety)
+              backCams.push(d);
+            }
+          });
+
+          // Use rear cameras if found, otherwise fall back to front cameras (like webcams)
+          if (backCams.length > 0) {
+            state.cameras = backCams;
+          } else if (frontCams.length > 0) {
+            state.cameras = frontCams;
+          } else {
+            state.cameras = devices;
+          }
         } else {
           state.cameras = [];
         }
@@ -525,14 +623,17 @@
           const size = Math.min(width, height) * 0.70;
           return { width: Math.floor(size), height: Math.floor(size) };
         },
-        disableFlip: false
+        disableFlip: true, // Desativa espelhamento para poupar CPU
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: false // Desativado para evitar travamento em Samsung
+        }
       };
 
       state.currentCameraIndex = 0;
       let started = false;
 
-      // Try starting with the first prioritized camera
-      if (state.cameras.length > 0) {
+      // Try starting with the first prioritized camera only if we have labels
+      if (state.cameras.length > 0 && hasLabels) {
         try {
           await state.scanner.start(
             state.cameras[0].id,
@@ -570,47 +671,47 @@
     }
   }
 
-  // Tries multiple standard facingMode constraint strategies with high-definition resolution constraints
+  // Tries multiple standard facingMode constraint strategies with resolution constraints optimized for decoding speed
   async function _startCameraWithFallback(config) {
-    // Strategy 1: HD resolution constraints on exact environment camera
-    try {
-      await state.scanner.start(
-        { 
-          facingMode: { exact: 'environment' },
-          width: { min: 640, ideal: 1280, max: 1920 },
-          height: { min: 480, ideal: 720, max: 1080 }
-        },
-        config, onScanSuccess, () => {}
-      );
-      return true;
-    } catch (e1) {
-      console.warn('Camera strategy 1 failed:', e1.message || e1);
+    // Strategy 1: Try starting using state.cameras list IDs sequentially
+    if (state.cameras && state.cameras.length > 0) {
+      for (let i = 0; i < state.cameras.length; i++) {
+        try {
+          console.log(`Fallback: tentando iniciar câmera ${i} (${state.cameras[i].label || 'sem label'}): ${state.cameras[i].id}`);
+          await state.scanner.start(
+            state.cameras[i].id,
+            config,
+            onScanSuccess,
+            () => {}
+          );
+          state.currentCameraIndex = i;
+          return true;
+        } catch (err) {
+          console.warn(`Falha ao iniciar câmera fallback ${i}:`, err.message || err);
+        }
+      }
     }
 
-    // Strategy 2: HD resolution constraints on standard environment camera
-    try {
-      await state.scanner.start(
-        { 
-          facingMode: 'environment',
-          width: { min: 640, ideal: 1280, max: 1920 },
-          height: { min: 480, ideal: 720, max: 1080 }
-        },
-        config, onScanSuccess, () => {}
-      );
-      return true;
-    } catch (e2) {
-      console.warn('Camera strategy 2 failed:', e2.message || e2);
-    }
-
-    // Strategy 3: Standard camera constraints (browser defaults)
+    // Strategy 2: Try standard environment facingMode
     try {
       await state.scanner.start(
         { facingMode: 'environment' },
         config, onScanSuccess, () => {}
       );
       return true;
+    } catch (e2) {
+      console.warn('Camera strategy facingMode: environment failed:', e2.message || e2);
+    }
+
+    // Strategy 3: Try user facingMode (only as absolute last resort, e.g. laptop webcam)
+    try {
+      await state.scanner.start(
+        { facingMode: 'user' },
+        config, onScanSuccess, () => {}
+      );
+      return true;
     } catch (e3) {
-      console.warn('Camera strategy 3 failed:', e3.message || e3);
+      console.warn('Camera strategy facingMode: user failed:', e3.message || e3);
     }
 
     return false;
@@ -636,7 +737,10 @@
           const size = Math.min(width, height) * 0.70;
           return { width: Math.floor(size), height: Math.floor(size) };
         },
-        disableFlip: false
+        disableFlip: true, // Desativa espelhamento para poupar CPU
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: false // Desativado para evitar travamento em Samsung
+        }
       };
 
       await state.scanner.start(
@@ -856,8 +960,8 @@
       try {
         new QRCode(qrDiv, {
           text: participant.id,
-          width: 140,
-          height: 140,
+          width: 300,
+          height: 300,
           colorDark: '#0a1628',
           colorLight: '#ffffff',
           correctLevel: QRCode.CorrectLevel.M
@@ -886,6 +990,66 @@
     });
   }
 
+  // Handle manual check-in search results
+  function handleManualSearch() {
+    if (!dom.manualSearchInput || !dom.manualSearchResults) return;
+    
+    const query = dom.manualSearchInput.value.toLowerCase().trim();
+    if (!query) {
+      dom.manualSearchResults.classList.add('hidden');
+      dom.manualSearchResults.innerHTML = '';
+      return;
+    }
+
+    // Filter participants locally
+    const matches = state.participants.filter(p => 
+      p.name.toLowerCase().includes(query) || 
+      (p.email && p.email.toLowerCase().includes(query))
+    ).slice(0, 15);
+
+    if (matches.length === 0) {
+      dom.manualSearchResults.innerHTML = '<div style="padding: 10px; text-align: center; font-size: 0.8rem; color: var(--text-secondary);">Nenhum participante encontrado</div>';
+      dom.manualSearchResults.classList.remove('hidden');
+      return;
+    }
+
+    dom.manualSearchResults.innerHTML = '';
+    matches.forEach(p => {
+      const item = document.createElement('div');
+      item.className = 'manual-search-item';
+      
+      const statusText = p.status === 'present' ? 'Confirmado' : 'Registrar';
+      const statusClass = p.status === 'present' ? 'present' : 'absent';
+      
+      item.innerHTML = `
+        <div class="item-info">
+          <span class="item-name">${escapeHtml(p.name)}</span>
+          <span class="item-email">${escapeHtml(p.email || 'Sem e-mail')}</span>
+        </div>
+        <span class="item-status ${statusClass}">${statusText}</span>
+      `;
+      
+      item.addEventListener('click', () => {
+        if (p.status === 'present') {
+          showToast(`${p.name} já tem presença confirmada.`, 'warning');
+          return;
+        }
+        
+        // Trigger check-in via normal scanSuccess method
+        onScanSuccess(p.id);
+        
+        // Clear search input and results
+        dom.manualSearchInput.value = '';
+        dom.manualSearchResults.classList.add('hidden');
+        dom.manualSearchResults.innerHTML = '';
+      });
+      
+      dom.manualSearchResults.appendChild(item);
+    });
+    
+    dom.manualSearchResults.classList.remove('hidden');
+  }
+
   // ============================================
   // QR MODAL
   // ============================================
@@ -897,8 +1061,8 @@
     try {
       new QRCode(dom.modalQrContainer, {
         text: participant.id,
-        width: 250,
-        height: 250,
+        width: 600,
+        height: 600,
         colorDark: '#0a1628',
         colorLight: '#ffffff',
         correctLevel: QRCode.CorrectLevel.H
@@ -916,19 +1080,61 @@
   }
 
   function downloadModalQR() {
-    const canvas = dom.modalQrContainer.querySelector('canvas');
-    if (!canvas) {
+    const originalCanvas = dom.modalQrContainer.querySelector('canvas');
+    if (!originalCanvas) {
       showToast('QR Code não disponível', 'error');
       return;
     }
 
     const name = dom.qrModal.dataset.participantName || 'qrcode';
+    const email = dom.modalEmail.textContent || '';
+    
+    // Original dimensions of the generated QR Code (ex: 600x600)
+    const qrWidth = originalCanvas.width;
+    const qrHeight = originalCanvas.height;
+
+    // Define border margins and footer height dynamically
+    const padding = Math.round(qrWidth * 0.08); // Contrast border (~8% of QR size, ex: 48px)
+    const footerHeight = Math.round(qrWidth * 0.18); // Area height for participant info (ex: 108px)
+    
+    // Create high-resolution temporary canvas for drawing the download image
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = qrWidth + (padding * 2);
+    exportCanvas.height = qrHeight + (padding * 2) + footerHeight;
+    const ctx = exportCanvas.getContext('2d');
+
+    // 1. Draw solid white background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+    // 2. Draw the QR Code image on top, centered
+    ctx.drawImage(originalCanvas, padding, padding, qrWidth, qrHeight);
+
+    // 3. Draw participant identification text below the QR Code
+    ctx.fillStyle = '#0a1628'; // Primary theme dark blue
+    ctx.textAlign = 'center';
+    
+    // Participant Name (bold)
+    const fontSizeName = Math.round(qrWidth * 0.045); // Font size proportional (ex: 27px)
+    ctx.font = `bold ${fontSizeName}px Outfit, Inter, sans-serif`;
+    const textY = qrHeight + padding + Math.round(footerHeight * 0.4);
+    ctx.fillText(name, exportCanvas.width / 2, textY);
+
+    // Participant Email/Institution (smaller text, secondary color)
+    if (email) {
+      const fontSizeEmail = Math.round(qrWidth * 0.032); // ex: 19px
+      ctx.font = `${fontSizeEmail}px Outfit, Inter, sans-serif`;
+      ctx.fillStyle = '#64748b'; // Gray text
+      ctx.fillText(email, exportCanvas.width / 2, textY + Math.round(fontSizeName * 0.95));
+    }
+
+    // 4. Download processed image
     const link = document.createElement('a');
     link.download = `QR_${name.replace(/\s+/g, '_')}.png`;
-    link.href = canvas.toDataURL('image/png');
+    link.href = exportCanvas.toDataURL('image/png');
     link.click();
 
-    showToast('QR Code baixado com sucesso', 'success');
+    showToast('QR Code com identificação baixado!', 'success');
   }
 
   // ============================================

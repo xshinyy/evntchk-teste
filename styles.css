@@ -1320,8 +1320,13 @@ input, button, textarea, select {
   display: inline-block;
 }
 
-.modal-qr canvas {
+.modal-qr canvas,
+.modal-qr img {
   display: block;
+  max-width: 250px !important;
+  width: 100% !important;
+  height: auto !important;
+  margin: 0 auto;
 }
 
 .modal-actions {
@@ -1434,4 +1439,56 @@ input, button, textarea, select {
     border-left: 1px solid var(--border);
     border-right: 1px solid var(--border);
   }
+}
+
+/* ============================================
+   MANUAL CHECK-IN SEARCH
+   ============================================ */
+.manual-search-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.manual-search-item:hover {
+  background: var(--bg-tertiary);
+}
+.manual-search-item .item-info {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  overflow: hidden;
+  margin-right: 10px;
+}
+.manual-search-item .item-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.manual-search-item .item-email {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.manual-search-item .item-status {
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.manual-search-item .item-status.present {
+  background: rgba(0, 230, 118, 0.15);
+  color: var(--success);
+}
+.manual-search-item .item-status.absent {
+  background: rgba(255, 23, 68, 0.15);
+  color: var(--error);
 }

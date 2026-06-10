@@ -1,4 +1,4 @@
-const CACHE_NAME = 'eventcheck-v2';
+const CACHE_NAME = 'eventcheck-v6';
 const STATIC_ASSETS = [
   './',
   './index.html',

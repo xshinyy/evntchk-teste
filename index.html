@@ -76,6 +76,7 @@
           <div class="event-status">
             <span class="status-dot" id="status-dot"></span>
             <span id="status-text">Desconectado</span>
+            <span id="auto-refresh-timer" style="margin-left: 5px; font-size: 0.70rem; color: var(--text-secondary); opacity: 0.85;"></span>
           </div>
         </div>
       </div>
@@ -160,6 +161,20 @@
           <div class="result-message" id="result-message"></div>
         </div>
       </div>
+
+      <!-- Check-in Manual -->
+      <div class="manual-checkin-container" style="margin-top: 25px; padding: 20px; background: var(--bg-glass); border: 1px solid var(--border); border-radius: var(--radius-md);">
+        <p style="font-size: 0.85rem; font-weight: 700; margin-bottom: 12px; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+          <span>📝</span> Check-in Manual
+        </p>
+        <div class="qr-search" style="margin-bottom: 0;">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="manual-search-input" placeholder="Buscar participante por nome ou e-mail..." style="width: 100%; padding: 10px 10px 10px 35px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 0.82rem;">
+        </div>
+        <div id="manual-search-results" class="manual-search-results hidden" style="max-height: 180px; overflow-y: auto; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-top: 8px; padding: 4px;">
+          <!-- Resultados dinâmicos inseridos via JS -->
+        </div>
+      </div>
     </section>
 
     <!-- ==================== QR CODES ==================== -->
@@ -222,6 +237,10 @@
         </div>
         <hr class="config-divider">
         <button class="btn btn-danger" id="clear-data-btn" style="margin-top: 8px;">🗑️ Limpar Dados Locais</button>
+        <hr class="config-divider">
+        <div class="app-version-container" style="text-align: center; margin-top: 25px; font-size: 0.75rem; color: var(--text-secondary); opacity: 0.75;">
+          Versão do Aplicativo: <span id="app-version">v1.3.3</span>
+        </div>
       </div>
     </section>
 
