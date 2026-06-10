@@ -11,6 +11,13 @@
   // CONSTANTES E CONFIGURAÇÕES
   // ============================================
   const APP_VERSION = 'v2.1.0';
+  
+  // Theatre.js variables
+  let theatreProj = null;
+  let theatreSheet = null;
+  let headerActor = null;
+  let cardsActor = null;
+  
   const APP_PASSWORD = 'IFMSAFAPI123';
   const STORAGE_KEYS = {
     scriptUrl: 'eventcheck_script_url_v2',
@@ -197,6 +204,9 @@
     dom.passwordInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') handlePasswordLogin();
     });
+    
+    // Inicializar Theatre.js
+    initTheatre();
   }
 
   function loadConfig() {
@@ -348,6 +358,11 @@
     
     carregarEventosDoSheets();
     setupSilentWarmupCamera();
+    
+    // Disparar animação cinemática do Theatre.js
+    if (theatreSheet) {
+      theatreSheet.sequence.play({ iterationCount: 1 });
+    }
   }
 
   function logout() {
@@ -1523,7 +1538,84 @@
       card.addEventListener('mouseleave', () => {
         card.style.transform = '';
       });
-    });
+  }
+
+  function initTheatre() {
+    const isDev = window.location.hostname === 'localhost' || 
+                  window.location.hostname === '127.0.0.1' || 
+                  window.location.protocol === 'file:';
+                  
+    if (!window.Theatre) {
+      console.log("Theatre.js não está disponível.");
+      return;
+    }
+
+    if (isDev && window.Theatre.studio) {
+      try {
+        window.Theatre.studio.initialize();
+      } catch (e) {
+        console.error("Erro ao inicializar o Theatre Studio:", e);
+      }
+    }
+    
+    let savedState = null;
+    const localStateStr = localStorage.getItem('theatre_fapi_state');
+    if (localStateStr) {
+      try {
+        savedState = JSON.parse(localStateStr);
+      } catch (e) {
+        console.error("Erro ao fazer parse do estado salvo do Theatre:", e);
+      }
+    }
+    
+    try {
+      theatreProj = window.Theatre.core.getProject('PainelIFMSA', { state: savedState });
+      theatreSheet = theatreProj.sheet('Intro_Dashboard');
+      
+      if (isDev) {
+        window.theatreProj = theatreProj;
+        window.theatreSheet = theatreSheet;
+      }
+      
+      // Registrar ator do cabeçalho e sidebar
+      headerActor = theatreSheet.object('Header_Sidebar', {
+        sidebarX: -80,
+        sidebarOpacity: 0,
+        headerY: -64,
+        headerOpacity: 0
+      });
+      
+      headerActor.onValuesChange((values) => {
+        const sidebar = document.querySelector('.app-sidebar');
+        const header = document.querySelector('.app-header');
+        
+        if (sidebar) {
+          sidebar.style.transform = `translateX(${values.sidebarX}px)`;
+          sidebar.style.opacity = values.sidebarOpacity;
+        }
+        if (header) {
+          header.style.transform = `translateY(${values.headerY}px)`;
+          header.style.opacity = values.headerOpacity;
+        }
+      });
+      
+      // Registrar ator dos cards do dashboard
+      cardsActor = theatreSheet.object('Dashboard_Cards', {
+        opacity: 0,
+        scale: 0.9,
+        yOffset: 30
+      });
+      
+      cardsActor.onValuesChange((values) => {
+        const cards = document.querySelectorAll('.stat-card');
+        cards.forEach((card) => {
+          card.style.opacity = values.opacity;
+          card.style.transform = `scale(${values.scale}) translateY(${values.yOffset}px)`;
+        });
+      });
+    } catch (err) {
+      console.error("Erro ao inicializar o Theatre.js:", err);
+    }
   }
 
   // ============================================
