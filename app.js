@@ -1,6 +1,7 @@
 /**
- * Painel IFMSA Brazil FAPI — Lógica da Aplicação (V2)
+ * Painel IFMSA Brazil FAPI — Command Center V2.1
  * Arquitetura PWA integrada ao Google Sheets com suporte offline
+ * + Camada de animações GSAP, partículas e confetti
  */
 
 (function() {
@@ -9,7 +10,8 @@
   // ============================================
   // CONSTANTES E CONFIGURAÇÕES
   // ============================================
-  const APP_VERSION = 'v2.0.0';
+  const APP_VERSION = 'v2.1.0';
+  const APP_PASSWORD = 'IFMSAFAPI123';
   const STORAGE_KEYS = {
     scriptUrl: 'eventcheck_script_url_v2',
     googleClientId: 'eventcheck_google_client_id_v2',
@@ -80,6 +82,7 @@
     // Seções
     sections: document.querySelectorAll('.section'),
     navItems: document.querySelectorAll('.nav-item'),
+    sidebarNavItems: document.querySelectorAll('.sidebar-nav-item'),
     
     // Métricas
     statTotal: document.getElementById('stat-total'),
@@ -99,6 +102,7 @@
     resultIcon: document.getElementById('result-icon'),
     resultName: document.getElementById('result-name'),
     resultMessage: document.getElementById('result-message'),
+    scannerPlaceholder: document.getElementById('scanner-placeholder'),
     
     // Check-in Manual
     manualSearchInput: document.getElementById('manual-search-input'),
@@ -168,6 +172,14 @@
     
     // Setup inicial dos gráficos vazios
     initCharts();
+    
+    // ═══ V2.1: Inicializar sistema de partículas ═══
+    if (window.IFMSAParticles) {
+      window.IFMSAParticles.init('particle-canvas');
+    }
+    
+    // ═══ V2.1: Tilt effect nos stat cards ═══
+    setupTiltEffect();
     
     // Configurar SDK do Google Sign-In se houver Client ID salvo
     if (state.googleClientId) {
@@ -489,7 +501,7 @@
   function switchTab(sectionId) {
     state.currentSection = sectionId;
     
-    // Atualizar Navegação
+    // Atualizar Navegação — Bottom nav (mobile)
     dom.navItems.forEach(item => {
       if (item.getAttribute('data-section') === sectionId) {
         item.classList.add('active');
@@ -498,10 +510,32 @@
       }
     });
     
-    // Exibir Seção
+    // Atualizar Navegação — Sidebar (desktop)
+    if (dom.sidebarNavItems) {
+      dom.sidebarNavItems.forEach(item => {
+        if (item.getAttribute('data-section') === sectionId) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      });
+    }
+    
+    // Exibir Seção com GSAP stagger (V2.1)
     dom.sections.forEach(section => {
       if (section.getAttribute('id') === `${sectionId}-section`) {
         section.classList.add('active');
+        
+        // ═══ V2.1: GSAP stagger entrance ═══
+        if (window.gsap) {
+          const children = section.querySelectorAll('.stat-card, .chart-card, .recent-item, .qr-card, .input-group, .qr-toolbar');
+          if (children.length > 0) {
+            gsap.fromTo(children, 
+              { opacity: 0, y: 20, scale: 0.97 },
+              { opacity: 1, y: 0, scale: 1, duration: 0.45, stagger: 0.06, ease: 'power3.out', clearProps: 'all' }
+            );
+          }
+        }
       } else {
         section.classList.remove('active');
       }
@@ -524,10 +558,12 @@
   
   function atualizarMetricsUI(stats) {
     if (!stats) return;
-    dom.statTotal.textContent = stats.total || 0;
-    dom.statPresent.textContent = stats.present || 0;
-    dom.statAbsent.textContent = stats.absent || 0;
-    dom.statPercentage.textContent = `${stats.percentage || 0}%`;
+    
+    // ═══ V2.1: Counter animation ═══
+    animateCounter(dom.statTotal, stats.total || 0);
+    animateCounter(dom.statPresent, stats.present || 0);
+    animateCounter(dom.statAbsent, stats.absent || 0);
+    animateCounter(dom.statPercentage, stats.percentage || 0, '%');
   }
 
   function atualizarRecentCheckinsList() {
@@ -839,6 +875,11 @@
     // Efeito Ripple e som visual
     dom.scannerViewport.classList.add('scan-success');
     setTimeout(() => dom.scannerViewport.classList.remove('scan-success'), 600);
+    
+    // ═══ V2.1: Fire confetti celebration ═══
+    if (window.IFMSAConfetti) {
+      window.IFMSAConfetti.fire({ count: 150 });
+    }
     
     processarCheckin(decodedText);
   }
@@ -1286,10 +1327,8 @@
   function setupTheme() {
     if (state.theme === 'light') {
       document.body.classList.add('light-theme');
-      dom.themeToggleBtn.textContent = '🌙';
     } else {
       document.body.classList.remove('light-theme');
-      dom.themeToggleBtn.textContent = '☀️';
     }
   }
 
@@ -1297,11 +1336,9 @@
     if (document.body.classList.contains('light-theme')) {
       document.body.classList.remove('light-theme');
       state.theme = 'dark';
-      dom.themeToggleBtn.textContent = '☀️';
     } else {
       document.body.classList.add('light-theme');
       state.theme = 'light';
-      dom.themeToggleBtn.textContent = '🌙';
     }
     localStorage.setItem(STORAGE_KEYS.theme, state.theme);
     
@@ -1378,12 +1415,21 @@
   // ============================================
   
   function bindEvents() {
-    // Menu e tabs
+    // Menu e tabs — Bottom nav (mobile)
     dom.navItems.forEach(item => {
       item.addEventListener('click', () => {
         switchTab(item.getAttribute('data-section'));
       });
     });
+    
+    // ═══ V2.1: Sidebar nav (desktop) ═══
+    if (dom.sidebarNavItems) {
+      dom.sidebarNavItems.forEach(item => {
+        item.addEventListener('click', () => {
+          switchTab(item.getAttribute('data-section'));
+        });
+      });
+    }
     
     // Eventos de cabeçalho
     dom.eventSelect.addEventListener('change', handleEventChange);
@@ -1429,6 +1475,55 @@
     dom.addPartSaveBtn.addEventListener('click', adicionarParticipante);
     dom.editPartSaveBtn.addEventListener('click', editarParticipante);
     dom.editPartDeleteBtn.addEventListener('click', excluirParticipante);
+  }
+
+  // ============================================
+  // V2.1: COUNTER ANIMATION & TILT EFFECT
+  // ============================================
+  
+  function animateCounter(element, target, suffix) {
+    if (!element) return;
+    suffix = suffix || '';
+    const current = parseInt(element.textContent) || 0;
+    
+    if (current === target) {
+      element.textContent = target + suffix;
+      return;
+    }
+    
+    if (window.gsap) {
+      const obj = { val: current };
+      gsap.to(obj, {
+        val: target,
+        duration: 0.8,
+        ease: 'power2.out',
+        onUpdate: () => {
+          element.textContent = Math.round(obj.val) + suffix;
+        }
+      });
+    } else {
+      element.textContent = target + suffix;
+    }
+  }
+  
+  function setupTiltEffect() {
+    const cards = document.querySelectorAll('[data-tilt]');
+    cards.forEach(card => {
+      card.addEventListener('mousemove', (e) => {
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const rotateX = ((y - centerY) / centerY) * -6;
+        const rotateY = ((x - centerX) / centerX) * 6;
+        card.style.transform = `perspective(800px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-4px) scale(1.02)`;
+      });
+      
+      card.addEventListener('mouseleave', () => {
+        card.style.transform = '';
+      });
+    });
   }
 
   // ============================================

@@ -3,38 +3,52 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="description" content="Painel de credenciamento e presença para os eventos da IFMSA Brazil FAPI">
-  <meta name="theme-color" content="#1d3768">
+  <meta name="description" content="Painel de credenciamento e presença para os eventos da IFMSA Brazil FAPI — Command Center V2.1">
+  <meta name="theme-color" content="#060a14">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="IFMSA FAPI">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-touch-fullscreen" content="no">
-  <title>Painel IFMSA Brazil FAPI</title>
+  <title>IFMSA FAPI — Command Center</title>
 
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231d3768'/%3E%3Cpath d='M16 6c-5.5 0-10 4.5-10 10s4.5 10 10 10 10-4.5 10-10S21.5 6 16 6zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8z' fill='%23ffffff'/%3E%3Cpath d='M17 11h-2v4h-4v2h4v4h2v-4h4v-2h-4z' fill='%23f59e0b'/%3E%3C/svg%3E">
 
-  <!-- Chart.js via CDN -->
+  <!-- External Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- Google Sign-In SDK -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- html5-qrcode for camera scanning -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <!-- qrcode.js for QR generation -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 
-  <!-- External Premium Stylesheet -->
+  <!-- Design System -->
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-  <!-- ==================== TELA DE LOGIN ==================== -->
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- AMBIENT LAYERS (Particle Canvas + Aurora)   -->
+  <!-- ═══════════════════════════════════════════ -->
+  <canvas id="particle-canvas"></canvas>
+  <canvas id="confetti-canvas"></canvas>
+
+  <div class="aurora-container">
+    <div class="aurora-blob"></div>
+    <div class="aurora-blob"></div>
+    <div class="aurora-blob"></div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- LOGIN SCREEN                                -->
+  <!-- ═══════════════════════════════════════════ -->
   <div id="login-screen">
     <div class="login-card">
+      <!-- Holographic shimmer overlay -->
+      <div class="login-shimmer"></div>
+
       <div class="login-logo">
-        <!-- Ícone Estilizado da Serpente de Esculápio / Medicina -->
-        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #ffffff;">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: #ffffff;">
           <path d="M4.5 16.5c-1.5 1.25-2.5 3-2.5 4.5v1h20v-1c0-1.5-1-3.25-2.5-4.5"/>
           <path d="M12 2v14"/>
           <path d="M12 2c1 0 2 1.5 2 3s-1 2.5-2 3.5c-1-1-2-2-2-3.5s1-3 2-3z"/>
@@ -42,10 +56,11 @@
           <path d="M9.5 8.5c1.5-.5 3.5-.5 5 0"/>
         </svg>
       </div>
-      <h1>Painel IFMSA FAPI</h1>
-      <p class="subtitle">Credenciamento de Eventos</p>
-      
-      <!-- Container do Botão Nativo do Google -->
+
+      <h1 class="login-title">IFMSA Brazil FAPI</h1>
+      <p class="subtitle">Command Center · Credenciamento</p>
+
+      <!-- Google Sign-In Native Button -->
       <div class="google-login-container">
         <div id="g-login-btn"></div>
       </div>
@@ -53,287 +68,435 @@
       <div class="login-divider">ou usar senha de acesso</div>
 
       <div class="login-input-group">
-        <span class="input-icon">🔑</span>
+        <span class="input-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </span>
         <input type="password" id="password-input" placeholder="Digite a senha de acesso" autocomplete="off">
       </div>
-      
+
       <p class="login-error" id="login-error">Senha incorreta ou acesso não autorizado.</p>
-      
+
       <button class="btn btn-primary" id="login-btn" type="button">
-        Entrar com Senha
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+          <polyline points="10 17 15 12 10 7"/>
+          <line x1="15" y1="12" x2="3" y2="12"/>
+        </svg>
+        Entrar
       </button>
     </div>
   </div>
 
-  <!-- ==================== APLICATIVO PRINCIPAL ==================== -->
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- MAIN APPLICATION                            -->
+  <!-- ═══════════════════════════════════════════ -->
   <div id="app" class="hidden">
 
-    <!-- Cabeçalho (Header) -->
-    <header class="app-header">
-      <div class="header-left">
-        <div class="header-logo">
-          <!-- Mini Logo IFMSA -->
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #ffffff;">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    <!-- ── SIDEBAR (Desktop) ── -->
+    <aside class="app-sidebar">
+      <div class="sidebar-logo">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="sidebar-nav-item active" data-section="dashboard" title="Dashboard">
+          <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
           </svg>
-        </div>
-        <div class="header-info">
-          <!-- Dropdown Seletor de Eventos (Abas) -->
-          <div class="event-selector-container">
-            <select id="event-select" class="event-select">
-              <option value="">Carregando eventos...</option>
-            </select>
-            <span class="event-select-arrow">▼</span>
+          <span>Painel</span>
+        </button>
+
+        <button class="sidebar-nav-item" data-section="scanner" title="Scanner QR">
+          <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+          <span>Scanner</span>
+        </button>
+
+        <button class="sidebar-nav-item" data-section="qrcodes" title="Inscritos">
+          <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span>Inscritos</span>
+        </button>
+
+        <button class="sidebar-nav-item" data-section="config" title="Configurações">
+          <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>Config</span>
+        </button>
+      </nav>
+
+      <button class="btn btn-icon btn-secondary sidebar-theme-toggle" id="theme-toggle-btn" title="Alternar tema">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+    </aside>
+
+    <!-- ── CONTENT AREA ── -->
+    <div class="app-content">
+
+      <!-- Header -->
+      <header class="app-header">
+        <div class="header-left">
+          <!-- Mobile logo (hidden on desktop where sidebar shows) -->
+          <div class="header-logo-mobile">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
           </div>
-          <div class="event-status">
-            <span class="status-dot" id="status-dot"></span>
-            <span id="status-text">Desconectado</span>
-            <span id="auto-refresh-timer" style="opacity: 0.8;"></span>
-          </div>
-        </div>
-      </div>
-      
-      <div class="header-actions">
-        <!-- Seletor Tema Claro/Escuro -->
-        <button class="btn btn-icon btn-secondary" id="theme-toggle-btn" title="Alternar tema" style="border-radius: 50%;">🌙</button>
-        <!-- Pill com perfil logado -->
-        <div class="profile-pill hidden" id="profile-pill">
-          <div class="profile-avatar" id="profile-avatar">U</div>
-          <span id="profile-name" style="max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Usuário</span>
-        </div>
-        <button class="btn btn-icon btn-secondary" id="refresh-btn" title="Atualizar dados">🔄</button>
-        <button class="btn btn-icon btn-secondary" id="logout-btn" title="Sair">🚪</button>
-      </div>
-    </header>
-
-    <!-- ==================== TELA: DASHBOARD ==================== -->
-    <section id="dashboard-section" class="section active">
-      <p class="section-title">Estatísticas Gerais</p>
-      
-      <!-- Cards de Métricas -->
-      <div class="stats-grid">
-        <div class="stat-card total">
-          <div class="stat-icon">👥</div>
-          <div class="stat-value" id="stat-total">—</div>
-          <div class="stat-label">Inscritos</div>
-        </div>
-        <div class="stat-card present">
-          <div class="stat-icon">✅</div>
-          <div class="stat-value" id="stat-present">—</div>
-          <div class="stat-label">Presentes</div>
-        </div>
-        <div class="stat-card absent">
-          <div class="stat-icon">⏳</div>
-          <div class="stat-value" id="stat-absent">—</div>
-          <div class="stat-label">Ausentes</div>
-        </div>
-        <div class="stat-card percentage">
-          <div class="stat-icon">📊</div>
-          <div class="stat-value" id="stat-percentage">—</div>
-          <div class="stat-label">% Presença</div>
-        </div>
-      </div>
-
-      <!-- Gráficos Interativos -->
-      <div class="dashboard-charts">
-        <div class="chart-card">
-          <h4>Proporção de Presença</h4>
-          <div class="chart-wrapper">
-            <canvas id="presence-chart"></canvas>
-          </div>
-        </div>
-        <div class="chart-card">
-          <h4>Fluxo de Entrada (Acumulado)</h4>
-          <div class="chart-wrapper">
-            <canvas id="flow-chart"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <!-- Check-ins Recentes -->
-      <div class="recent-section">
-        <div class="recent-header">
-          <h3>Entradas Recentes</h3>
-          <span class="recent-count" id="recent-count">0 hoje</span>
-        </div>
-        <div class="recent-list" id="recent-list">
-          <div class="empty-state" id="empty-recent">
-            <div class="empty-icon">📋</div>
-            <p>Nenhum check-in registrado na sessão atual.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ==================== TELA: SCANNER ==================== -->
-    <section id="scanner-section" class="section">
-      <p class="section-title">Leitor de Credenciais</p>
-      <div class="scanner-wrapper">
-        <div class="scanner-viewport" id="scanner-viewport">
-          <div class="scanner-corners">
-            <div class="corner-bl"></div>
-            <div class="corner-br"></div>
-          </div>
-          <div class="scanner-laser"></div>
-          <div id="scanner-view"></div>
-          <div class="empty-state" id="scanner-placeholder" style="padding-top: 80px;">
-            <div class="empty-icon">📷</div>
-            <p>Clique abaixo para ativar o leitor de QR Code</p>
-          </div>
-        </div>
-        
-        <div class="scanner-controls">
-          <button class="btn btn-primary" id="start-scan-btn">📷 Iniciar Scanner</button>
-          <button class="btn btn-secondary hidden" id="switch-camera-btn">🔄 Alternar Câmera</button>
-          <button class="btn btn-danger hidden" id="stop-scan-btn">⏹ Parar Leitor</button>
-        </div>
-        <p class="scanner-tip">Posicione o QR Code impresso ou no celular dentro da área de leitura.</p>
-        
-        <div>
-          <label class="btn btn-secondary" style="cursor: pointer; display: inline-flex;">
-            📁 Enviar Imagem de QR
-            <input type="file" accept="image/*" capture="environment" id="qr-file-input" style="display: none;">
-          </label>
-        </div>
-      </div>
-
-      <!-- Feedback de Escaneamento -->
-      <div class="scan-result" id="scan-result">
-        <div class="result-icon" id="result-icon"></div>
-        <div class="result-info">
-          <div class="result-name" id="result-name"></div>
-          <div class="result-message" id="result-message"></div>
-        </div>
-      </div>
-
-      <!-- Check-in Manual / Pesquisa rápida -->
-      <div class="manual-checkin-container" style="margin-top: 25px; padding: 20px; background: var(--bg-glass); border: 1px solid var(--border); border-radius: var(--radius-md);">
-        <p style="font-size: 0.85rem; font-weight: 700; margin-bottom: 12px; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
-          <span>📝</span> Check-in Manual
-        </p>
-        <div class="qr-search" style="margin-bottom: 0;">
-          <span class="search-icon">🔍</span>
-          <input type="text" id="manual-search-input" placeholder="Buscar participante por nome ou e-mail...">
-        </div>
-        <div id="manual-search-results" class="manual-search-results hidden">
-          <!-- Resultados dinâmicos -->
-        </div>
-      </div>
-    </section>
-
-    <!-- ==================== TELA: PARTICIPANTES / QR CODES ==================== -->
-    <section id="qrcodes-section" class="section">
-      <p class="section-title">Gerenciador de Participantes</p>
-      <div class="qr-toolbar">
-        <button class="btn btn-primary" id="open-add-modal-btn">➕ Novo Participante</button>
-        <button class="btn btn-secondary" id="send-emails-bulk-btn">✉️ Enviar QR Codes</button>
-        <button class="btn btn-secondary" id="print-qr-btn">🖨️ Imprimir Todos</button>
-      </div>
-      
-      <div class="qr-search">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="qr-search-input" placeholder="Pesquisar participante por nome, e-mail ou código...">
-      </div>
-
-      <div class="qr-grid" id="qr-grid">
-        <div class="empty-state" id="empty-qr">
-          <div class="empty-icon">👥</div>
-          <p>Carregando lista de participantes da planilha ativa...</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- ==================== TELA: CONFIGURAÇÕES ==================== -->
-    <section id="config-section" class="section">
-      <p class="section-title">Ajustes & Eventos</p>
-      <div class="config-form">
-        
-        <!-- Bloco: Criar Novo Evento -->
-        <div class="input-group" style="padding: 20px; background: var(--bg-glass-light); border: 1px solid var(--border); border-radius: var(--radius-md);">
-          <label>Criar Novo Evento (Nova Aba)</label>
-          <span class="input-hint" style="margin-bottom: 10px;">Isso criará uma nova aba limpa na planilha do Sheets para credenciamento independente.</span>
-          <div style="display: flex; gap: 8px;">
-            <input type="text" id="new-event-name-input" placeholder="Ex: Mini Curso Cirurgia" style="flex: 1;">
-            <button class="btn btn-gold" id="create-event-btn" style="padding: 10px 20px;">Criar</button>
+          <div class="header-info">
+            <div class="event-selector-container">
+              <select id="event-select" class="event-select">
+                <option value="">Carregando eventos...</option>
+              </select>
+              <span class="event-select-arrow">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </span>
+            </div>
+            <div class="event-status">
+              <span class="status-dot" id="status-dot"></span>
+              <span id="status-text">Desconectado</span>
+              <span id="auto-refresh-timer" style="opacity: 0.7;"></span>
+            </div>
           </div>
         </div>
 
-        <div class="input-group">
-          <label for="config-google-client-id">ID de Cliente Google OAuth (Client ID)</label>
-          <input type="text" id="config-google-client-id" placeholder="Ex: xxxxxxx.apps.googleusercontent.com">
-          <span class="input-hint">Obtenha no Google Cloud Console. Se deixado em branco, o login Google ficará desativado.</span>
+        <div class="header-actions">
+          <div class="profile-pill hidden" id="profile-pill">
+            <div class="profile-avatar" id="profile-avatar">U</div>
+            <span id="profile-name" style="max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Usuário</span>
+          </div>
+          <button class="btn btn-icon btn-secondary" id="refresh-btn" title="Atualizar dados">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </button>
+          <button class="btn btn-icon btn-secondary" id="logout-btn" title="Sair">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+
+      <!-- ═══════════ DASHBOARD ═══════════ -->
+      <section id="dashboard-section" class="section active">
+        <p class="section-title">Estatísticas Gerais</p>
+
+        <div class="stats-grid">
+          <div class="stat-card total" data-tilt>
+            <div class="stat-accent"></div>
+            <div class="stat-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div class="stat-value" id="stat-total">—</div>
+            <div class="stat-label">Inscritos</div>
+          </div>
+          <div class="stat-card present" data-tilt>
+            <div class="stat-accent"></div>
+            <div class="stat-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <div class="stat-value" id="stat-present">—</div>
+            <div class="stat-label">Presentes</div>
+          </div>
+          <div class="stat-card absent" data-tilt>
+            <div class="stat-accent"></div>
+            <div class="stat-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div class="stat-value" id="stat-absent">—</div>
+            <div class="stat-label">Ausentes</div>
+          </div>
+          <div class="stat-card percentage" data-tilt>
+            <div class="stat-accent"></div>
+            <div class="stat-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+            </div>
+            <div class="stat-value" id="stat-percentage">—</div>
+            <div class="stat-label">% Presença</div>
+          </div>
         </div>
 
-        <div class="input-group">
-          <label for="config-script-url">URL do Google Apps Script Web App</label>
-          <input type="url" id="config-script-url" placeholder="https://script.google.com/macros/s/.../exec">
-          <span class="input-hint">Cole aqui a URL de implantação ativa do Web App.</span>
-        </div>
-        
-        <div class="config-actions">
-          <button class="btn btn-primary" id="save-config-btn">💾 Salvar Configurações</button>
-          <button class="btn btn-secondary" id="test-connection-btn">🔗 Testar Conexão</button>
+        <!-- Charts -->
+        <div class="dashboard-charts">
+          <div class="chart-card">
+            <h4>Proporção de Presença</h4>
+            <div class="chart-wrapper">
+              <canvas id="presence-chart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h4>Fluxo de Entrada (Acumulado)</h4>
+            <div class="chart-wrapper">
+              <canvas id="flow-chart"></canvas>
+            </div>
+          </div>
         </div>
 
-        <div class="connection-status hidden" id="connection-status">
-          <span id="connection-icon"></span>
-          <span id="connection-text"></span>
+        <!-- Recent Check-ins -->
+        <div class="recent-section">
+          <div class="recent-header">
+            <h3>Entradas Recentes</h3>
+            <span class="recent-count" id="recent-count">0 hoje</span>
+          </div>
+          <div class="recent-list" id="recent-list">
+            <div class="empty-state" id="empty-recent">
+              <div class="empty-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              </div>
+              <p>Nenhum check-in registrado na sessão atual.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ═══════════ SCANNER ═══════════ -->
+      <section id="scanner-section" class="section">
+        <p class="section-title">Leitor de Credenciais</p>
+        <div class="scanner-wrapper">
+          <div class="scanner-viewport" id="scanner-viewport">
+            <div class="scanner-corners">
+              <div class="corner-bl"></div>
+              <div class="corner-br"></div>
+            </div>
+            <div class="scanner-laser"></div>
+            <div id="scanner-view"></div>
+            <div class="empty-state" id="scanner-placeholder" style="padding-top: 80px;">
+              <div class="empty-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              </div>
+              <p>Clique abaixo para ativar o leitor de QR Code</p>
+            </div>
+          </div>
+
+          <div class="scanner-controls">
+            <button class="btn btn-primary" id="start-scan-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              Iniciar Scanner
+            </button>
+            <button class="btn btn-secondary hidden" id="switch-camera-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              Câmera
+            </button>
+            <button class="btn btn-danger hidden" id="stop-scan-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
+              Parar
+            </button>
+          </div>
+          <p class="scanner-tip">Posicione o QR Code impresso ou no celular dentro da área de leitura.</p>
+
+          <div>
+            <label class="btn btn-secondary" style="cursor: pointer; display: inline-flex;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Enviar Imagem
+              <input type="file" accept="image/*" capture="environment" id="qr-file-input" style="display: none;">
+            </label>
+          </div>
         </div>
 
-        <hr class="config-divider">
-        <button class="btn btn-danger" id="clear-data-btn">🗑️ Limpar Armazenamento Local</button>
-        
-        <div class="app-version-container" style="text-align: center; margin-top: 25px; font-size: 0.75rem; color: var(--text-secondary); opacity: 0.75;">
-          Versão do Painel: <span id="app-version">v2.0.0</span>
+        <!-- Scan Result Overlay -->
+        <div class="scan-result" id="scan-result">
+          <div class="result-icon" id="result-icon"></div>
+          <div class="result-info">
+            <div class="result-name" id="result-name"></div>
+            <div class="result-message" id="result-message"></div>
+          </div>
         </div>
-      </div>
-    </section>
 
-    <!-- Barra de Navegação Inferior -->
+        <!-- Manual Check-in -->
+        <div class="manual-checkin-container">
+          <p style="font-size: 0.82rem; font-weight: 700; margin-bottom: 12px; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Check-in Manual
+          </p>
+          <div class="qr-search" style="margin-bottom: 0;">
+            <span class="search-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </span>
+            <input type="text" id="manual-search-input" placeholder="Buscar participante por nome ou e-mail...">
+          </div>
+          <div id="manual-search-results" class="manual-search-results hidden"></div>
+        </div>
+      </section>
+
+
+      <!-- ═══════════ PARTICIPANTES ═══════════ -->
+      <section id="qrcodes-section" class="section">
+        <p class="section-title">Gerenciador de Participantes</p>
+
+        <div class="qr-toolbar">
+          <button class="btn btn-primary" id="open-add-modal-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Novo Participante
+          </button>
+          <button class="btn btn-secondary" id="send-emails-bulk-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Enviar QR Codes
+          </button>
+          <button class="btn btn-secondary" id="print-qr-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Imprimir
+          </button>
+        </div>
+
+        <div class="qr-search">
+          <span class="search-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </span>
+          <input type="text" id="qr-search-input" placeholder="Pesquisar participante por nome, e-mail ou código...">
+        </div>
+
+        <div class="qr-grid" id="qr-grid">
+          <div class="empty-state" id="empty-qr">
+            <div class="empty-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <p>Carregando lista de participantes da planilha ativa...</p>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ═══════════ CONFIGURAÇÕES ═══════════ -->
+      <section id="config-section" class="section">
+        <p class="section-title">Ajustes & Eventos</p>
+        <div class="config-form">
+
+          <!-- Create New Event -->
+          <div class="input-group" style="padding: 20px; background: var(--bg-glass-light); border: 1px solid var(--border); border-radius: var(--radius-md);">
+            <label>Criar Novo Evento (Nova Aba)</label>
+            <span class="input-hint" style="margin-bottom: 10px;">Isso criará uma nova aba limpa na planilha do Sheets para credenciamento independente.</span>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="new-event-name-input" placeholder="Ex: Mini Curso Cirurgia" style="flex: 1;">
+              <button class="btn btn-gold" id="create-event-btn" style="padding: 10px 20px;">Criar</button>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="config-google-client-id">ID de Cliente Google OAuth (Client ID)</label>
+            <input type="text" id="config-google-client-id" placeholder="Ex: xxxxxxx.apps.googleusercontent.com">
+            <span class="input-hint">Obtenha no Google Cloud Console. Se deixado em branco, o login Google ficará desativado.</span>
+          </div>
+
+          <div class="input-group">
+            <label for="config-script-url">URL do Google Apps Script Web App</label>
+            <input type="url" id="config-script-url" placeholder="https://script.google.com/macros/s/.../exec">
+            <span class="input-hint">Cole aqui a URL de implantação ativa do Web App.</span>
+          </div>
+
+          <div class="config-actions">
+            <button class="btn btn-primary" id="save-config-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Salvar
+            </button>
+            <button class="btn btn-secondary" id="test-connection-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              Testar Conexão
+            </button>
+          </div>
+
+          <div class="connection-status hidden" id="connection-status">
+            <span id="connection-icon"></span>
+            <span id="connection-text"></span>
+          </div>
+
+          <hr class="config-divider">
+          <button class="btn btn-danger" id="clear-data-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Limpar Armazenamento Local
+          </button>
+
+          <div class="app-version-container" style="text-align: center; margin-top: 25px; font-size: 0.72rem; color: var(--text-secondary); opacity: 0.6;">
+            Command Center · Versão <span id="app-version">v2.1.0</span>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /.app-content -->
+
+    <!-- ── BOTTOM NAV (Mobile) ── -->
     <nav class="bottom-nav" id="bottom-nav">
       <button class="nav-item active" data-section="dashboard">
-        <span class="nav-icon">📊</span>
-        <span class="nav-label">Dashboard</span>
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        </span>
+        <span class="nav-label">Painel</span>
       </button>
       <button class="nav-item" data-section="scanner">
-        <span class="nav-icon">📷</span>
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </span>
         <span class="nav-label">Scanner</span>
       </button>
       <button class="nav-item" data-section="qrcodes">
-        <span class="nav-icon">👥</span>
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </span>
         <span class="nav-label">Inscritos</span>
       </button>
       <button class="nav-item" data-section="config">
-        <span class="nav-icon">⚙️</span>
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </span>
         <span class="nav-label">Config</span>
       </button>
     </nav>
   </div>
 
-  <!-- Contêiner de Notificações Toast -->
+
+  <!-- ═══════════ TOAST CONTAINER ═══════════ -->
   <div class="toast-container" id="toast-container"></div>
 
-  <!-- ==================== MODAIS ==================== -->
-  
-  <!-- Modal 1: Visualização de QR Code Expandido -->
+
+  <!-- ═══════════ MODALS ═══════════ -->
+
+  <!-- Modal: QR Code View -->
   <div class="modal-backdrop hidden" id="qr-modal">
     <div class="modal-content">
       <h3 id="modal-name">Participante</h3>
       <p class="modal-subtitle" id="modal-email">email@exemplo.com</p>
       <div class="modal-qr" id="modal-qr-container"></div>
       <div class="modal-actions">
-        <button class="btn btn-gold" id="modal-edit-btn">✏️ Editar</button>
+        <button class="btn btn-gold" id="modal-edit-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Editar
+        </button>
         <button class="btn btn-secondary" id="modal-close-btn">Fechar</button>
       </div>
     </div>
   </div>
 
-  <!-- Modal 2: Novo Participante -->
+  <!-- Modal: Add Participant -->
   <div class="modal-backdrop hidden" id="add-participant-modal">
     <div class="modal-content">
       <h3>Novo Participante</h3>
       <p class="modal-subtitle">Adicionar registro diretamente na planilha do Sheets</p>
-      
       <div class="config-form" style="gap: 15px;">
         <div class="input-group">
           <label for="add-part-name">Nome Completo</label>
@@ -348,7 +511,6 @@
           <input type="text" id="add-part-institution" placeholder="Ex: FAPI - Faculdade de Apucarana">
         </div>
       </div>
-      
       <div class="modal-actions">
         <button class="btn btn-primary" id="add-part-save-btn">Salvar</button>
         <button class="btn btn-secondary" id="add-part-cancel-btn">Cancelar</button>
@@ -356,13 +518,12 @@
     </div>
   </div>
 
-  <!-- Modal 3: Editar Participante -->
+  <!-- Modal: Edit Participant -->
   <div class="modal-backdrop hidden" id="edit-participant-modal">
     <div class="modal-content">
       <h3>Editar Cadastro</h3>
       <p class="modal-subtitle">Modificar participante na planilha do Sheets</p>
       <input type="hidden" id="edit-part-id">
-      
       <div class="config-form" style="gap: 15px;">
         <div class="input-group">
           <label for="edit-part-name">Nome Completo</label>
@@ -377,24 +538,43 @@
           <input type="text" id="edit-part-institution">
         </div>
       </div>
-      
       <div class="modal-actions" style="flex-direction: column; gap: 8px;">
         <div style="display: flex; gap: 12px; width: 100%;">
           <button class="btn btn-primary" id="edit-part-save-btn">Salvar Alterações</button>
           <button class="btn btn-secondary" id="edit-part-cancel-btn">Cancelar</button>
         </div>
-        <button class="btn btn-danger" id="edit-part-delete-btn" style="width: 100%;">🗑️ Excluir Participante</button>
+        <button class="btn btn-danger" id="edit-part-delete-btn" style="width: 100%;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Excluir Participante
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- Overlay de Carregamento (Loading) -->
+
+  <!-- ═══════════ LOADING OVERLAY ═══════════ -->
   <div class="loading-overlay hidden" id="loading-overlay">
-    <div class="loading-spinner"></div>
+    <div class="dna-helix">
+      <div class="dna-strand">
+        <div class="dna-dot"></div>
+        <div class="dna-dot"></div>
+        <div class="dna-dot"></div>
+        <div class="dna-dot"></div>
+      </div>
+      <div class="dna-strand">
+        <div class="dna-dot"></div>
+        <div class="dna-dot"></div>
+        <div class="dna-dot"></div>
+        <div class="dna-dot"></div>
+      </div>
+    </div>
     <p class="loading-text" id="loading-text">Processando requisição...</p>
   </div>
 
-  <!-- Main Application Script -->
+
+  <!-- ═══════════ SCRIPTS ═══════════ -->
+  <script src="particles.js"></script>
   <script src="app.js" defer></script>
+
 </body>
 </html>
