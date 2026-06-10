@@ -1,5 +1,5 @@
 /**
- * EventCheck — Google Apps Script Backend
+ * Painel IFMSA Brazil FAPI — Google Apps Script Backend (V2)
  * 
  * INSTRUÇÕES DE INSTALAÇÃO:
  * 1. Abra sua planilha no Google Sheets
@@ -11,43 +11,37 @@
  * 7. Quem tem acesso: "Qualquer pessoa"
  * 8. Clique em "Implantar" e copie a URL gerada
  * 9. Cole a URL no app EventCheck em Configurações
- *
- * FORMATO DA PLANILHA (primeira aba):
- * Coluna A: Nome
- * Coluna B: Email
- * Coluna C: Instituição
- * Coluna D: ID_Unico (gerado automaticamente)
- * Coluna E: Status (preenchido pelo app)
- * Coluna F: Data_Checkin (preenchido pelo app)
- *
- * A primeira linha deve ser o cabeçalho.
  */
 
 // ============================================
-// CONFIGURAÇÃO
+// CONFIGURAÇÕES DO SISTEMA
 // ============================================
-const APP_PASSWORD = 'IFMSAFAPI123';
+const APP_PASSWORD = 'IFMSAFAPI123'; // Senha legada para compatibilidade de API
 
 // ============================================
-// HANDLERS HTTP
+// HANDLERS HTTP (API)
 // ============================================
 
 function doGet(e) {
   try {
     var params = e.parameter;
     
-    // Verificar senha
-    if (params.password !== APP_PASSWORD) {
-      return jsonResponse({ status: 'unauthorized', message: 'Senha incorreta' });
+    // Verificar Autenticação (Token do Google ou Senha)
+    var auth = verificarAutorizacao(params, null);
+    if (!auth.autorizado) {
+      return jsonResponse({ status: 'unauthorized', message: 'Usuário não autorizado.' });
     }
     
     var action = params.action || 'list';
+    var sheetName = params.sheetName || '';
     
     switch(action) {
       case 'list':
-        return handleList();
+        return handleList(sheetName);
       case 'stats':
-        return handleStats();
+        return handleStats(sheetName);
+      case 'list_events':
+        return handleListEvents();
       default:
         return jsonResponse({ status: 'error', message: 'Ação desconhecida: ' + action });
     }
@@ -61,18 +55,30 @@ function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
     
-    // Verificar senha
-    if (data.password !== APP_PASSWORD) {
-      return jsonResponse({ status: 'unauthorized', message: 'Senha incorreta' });
+    // Verificar Autenticação (Token do Google ou Senha)
+    var auth = verificarAutorizacao(null, data);
+    if (!auth.autorizado) {
+      return jsonResponse({ status: 'unauthorized', message: 'Usuário não autorizado.' });
     }
     
     var action = data.action || '';
+    var sheetName = data.sheetName || '';
     
     switch(action) {
       case 'checkin':
-        return handleCheckin(data.id);
+        return handleCheckin(data.id, sheetName);
       case 'generate_ids':
-        return handleGenerateIds();
+        return handleGenerateIds(sheetName);
+      case 'add_participant':
+        return handleAddParticipant(data.participant, sheetName);
+      case 'edit_participant':
+        return handleEditParticipant(data.participant, sheetName);
+      case 'delete_participant':
+        return handleDeleteParticipant(data.id, sheetName);
+      case 'create_event':
+        return handleCreateEvent(data.name);
+      case 'send_emails':
+        return handleSendEmails(sheetName);
       default:
         return jsonResponse({ status: 'error', message: 'Ação desconhecida: ' + action });
     }
@@ -83,14 +89,150 @@ function doPost(e) {
 }
 
 // ============================================
-// AÇÕES
+// AUTENTICAÇÃO E AUTORIZAÇÃO
 // ============================================
 
 /**
- * Lista todos os participantes
+ * Valida o token ID do Google com a API do Google OAuth2.
  */
-function handleList() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+function verificarGoogleToken(idToken) {
+  if (!idToken) return null;
+  try {
+    var response = UrlFetchApp.fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(idToken), {
+      muteHttpExceptions: true
+    });
+    
+    if (response.getResponseCode() === 200) {
+      var data = JSON.parse(response.getContentText());
+      return data.email;
+    }
+  } catch(err) {
+    Logger.log("Erro ao validar token Google: " + err.toString());
+  }
+  return null;
+}
+
+/**
+ * Verifica se a requisição está autorizada via token do Google ou senha.
+ */
+function verificarAutorizacao(params, postData) {
+  var token = (params && params.googleToken) || (postData && postData.googleToken);
+  var password = (params && params.password) || (postData && postData.password);
+  
+  // 1. Validar senha legada v1
+  if (password === APP_PASSWORD) {
+    return { autorizado: true, email: 'admin@legado.com', nome: 'Administrador Legado' };
+  }
+  
+  // 2. Validar login individual do Google
+  if (token) {
+    var email = verificarGoogleToken(token);
+    if (email) {
+      email = email.toLowerCase().trim();
+      
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var owner = ss.getOwner();
+      var ownerEmail = owner ? owner.getEmail().toLowerCase().trim() : "";
+      
+      // Dono da planilha tem acesso irrestrito
+      if (email === ownerEmail) {
+        return { autorizado: true, email: email, nome: "Dono da Planilha" };
+      }
+      
+      // Buscar na aba Config_Acesso
+      var configSheet = ss.getSheetByName("Config_Acesso");
+      if (configSheet) {
+        var data = configSheet.getDataRange().getValues();
+        for (var i = 1; i < data.length; i++) {
+          var userEmail = (data[i][0] || '').toString().toLowerCase().trim();
+          var userName = (data[i][1] || '').toString();
+          if (userEmail === email) {
+            return { autorizado: true, email: email, nome: userName || userEmail };
+          }
+        }
+      } else {
+        // Se a aba de controle não existir, cria automaticamente
+        criarPlanilhaAcesso(ss, ownerEmail);
+        if (email === ownerEmail) {
+          return { autorizado: true, email: email, nome: "Dono da Planilha" };
+        }
+      }
+    }
+  }
+  
+  return { autorizado: false };
+}
+
+/**
+ * Cria a planilha de acessos autorizados ocultando-a.
+ */
+function criarPlanilhaAcesso(ss, ownerEmail) {
+  try {
+    var sheet = ss.insertSheet("Config_Acesso");
+    sheet.appendRow(["Email", "Nome"]);
+    if (ownerEmail) {
+      sheet.appendRow([ownerEmail, "Administrador Geral"]);
+    }
+    sheet.hideSheet();
+  } catch(e) {
+    Logger.log("Erro ao criar aba Config_Acesso: " + e.toString());
+  }
+}
+
+// ============================================
+// NAVEGAÇÃO DE ABAS & ROTAS (MULTI-EVENTOS)
+// ============================================
+
+/**
+ * Retorna a planilha correspondente à aba ativa, criando o fallback se necessário.
+ */
+function obterPlanilhaAtiva(sheetName) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (sheetName) {
+    var sheet = ss.getSheetByName(sheetName);
+    if (sheet) return sheet;
+  }
+  
+  // Fallback para o primeiro sheet visível que não seja do sistema
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    var name = sheets[i].getName();
+    if (name !== "Config_Acesso" && name.toLowerCase().indexOf("respostas") === -1 && !sheets[i].isSheetHidden()) {
+      return sheets[i];
+    }
+  }
+  return ss.getActiveSheet();
+}
+
+/**
+ * Lista todos os eventos disponíveis (abas da planilha)
+ */
+function handleListEvents() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  var events = [];
+  
+  for (var i = 0; i < sheets.length; i++) {
+    var name = sheets[i].getName();
+    // Ignorar abas ocultas e de controle/formulários
+    if (name === "Config_Acesso" || name.toLowerCase().indexOf("respostas") > -1 || sheets[i].isSheetHidden()) {
+      continue;
+    }
+    events.push(name);
+  }
+  
+  return jsonResponse({ status: 'success', events: events });
+}
+
+// ============================================
+// AÇÕES DO CONTROLADOR DE PARTICIPANTES
+// ============================================
+
+/**
+ * Lista participantes de uma aba específica
+ */
+function handleList(sheetName) {
+  var sheet = obterPlanilhaAtiva(sheetName);
   var data = sheet.getDataRange().getDisplayValues();
   
   if (data.length <= 1) {
@@ -103,7 +245,6 @@ function handleList() {
   
   var participants = [];
   var present = 0;
-  var total = data.length - 1; // Exclui cabeçalho
   
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
@@ -113,8 +254,9 @@ function handleList() {
     var id = row[3] || '';
     var status = row[4] || '';
     var checkinDate = row[5] || '';
+    var preForm = row[7] || '';
+    var posForm = row[8] || '';
     
-    // Pular linhas vazias
     if (!name && !email) continue;
     
     var isPresent = (status.toString().indexOf('Presente') > -1 || status.toString().indexOf('✅') > -1);
@@ -126,12 +268,13 @@ function handleList() {
       institution: institution.toString(),
       id: id.toString(),
       status: isPresent ? 'present' : 'absent',
-      checkinDate: checkinDate ? checkinDate.toString() : ''
+      checkinDate: checkinDate ? checkinDate.toString() : '',
+      preForm: (preForm.toString().indexOf('Respondido') > -1 || preForm.toString().indexOf('✅') > -1) ? 'yes' : 'no',
+      posForm: (posForm.toString().indexOf('Respondido') > -1 || posForm.toString().indexOf('✅') > -1) ? 'yes' : 'no'
     });
   }
   
-  // Recalcular total excluindo linhas vazias
-  total = participants.length;
+  var total = participants.length;
   var absent = total - present;
   var percentage = total > 0 ? Math.round((present / total) * 100) : 0;
   
@@ -148,10 +291,10 @@ function handleList() {
 }
 
 /**
- * Retorna apenas as estatísticas
+ * Retorna as estatísticas de uma aba específica
  */
-function handleStats() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+function handleStats(sheetName) {
+  var sheet = obterPlanilhaAtiva(sheetName);
   var data = sheet.getDataRange().getDisplayValues();
   
   var total = 0;
@@ -159,7 +302,7 @@ function handleStats() {
   
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
-    if (!row[0] && !row[1]) continue; // Pular linhas vazias
+    if (!row[0] && !row[1]) continue;
     total++;
     var status = row[4] || '';
     if (status.toString().indexOf('Presente') > -1 || status.toString().indexOf('✅') > -1) {
@@ -179,14 +322,14 @@ function handleStats() {
 }
 
 /**
- * Registra check-in de um participante
+ * Registra o check-in do participante
  */
-function handleCheckin(participantId) {
+function handleCheckin(participantId, sheetName) {
   if (!participantId) {
     return jsonResponse({ status: 'error', message: 'ID do participante não fornecido' });
   }
   
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var sheet = obterPlanilhaAtiva(sheetName);
   var data = sheet.getDataRange().getDisplayValues();
   
   for (var i = 1; i < data.length; i++) {
@@ -196,27 +339,25 @@ function handleCheckin(participantId) {
       var currentStatus = (data[i][4] || '').toString();
       var name = data[i][0].toString();
       
-      // Verificar se já fez check-in
       if (currentStatus.indexOf('Presente') > -1 || currentStatus.indexOf('✅') > -1) {
         var checkinDate = data[i][5] || '';
         return jsonResponse({ 
           status: 'already_checked_in', 
           name: name,
-          message: 'Participante já registrado' + (checkinDate ? ' em ' + checkinDate.toString() : '')
+          message: 'Presença já registrada' + (checkinDate ? ' em ' + checkinDate.toString() : '')
         });
       }
       
-      // Registrar presença
       var now = new Date();
       var formattedDate = Utilities.formatDate(now, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm:ss');
       
-      sheet.getRange(i + 1, 5).setValue('✅ Presente');  // Coluna E
-      sheet.getRange(i + 1, 6).setValue("'" + formattedDate);    // Coluna F
+      sheet.getRange(i + 1, 5).setValue('✅ Presente');
+      sheet.getRange(i + 1, 6).setValue("'" + formattedDate);
       
       return jsonResponse({ 
         status: 'success', 
         name: name,
-        message: 'Check-in registrado com sucesso às ' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'HH:mm')
+        message: 'Check-in registrado às ' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'HH:mm')
       });
     }
   }
@@ -228,29 +369,23 @@ function handleCheckin(participantId) {
 }
 
 /**
- * Gera IDs únicos para participantes que não possuem
+ * Gera IDs únicos nas colunas de uma aba específica
  */
-function handleGenerateIds() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+function handleGenerateIds(sheetName) {
+  var sheet = obterPlanilhaAtiva(sheetName);
   var data = sheet.getDataRange().getDisplayValues();
   var count = 0;
   
-  // Verificar se a primeira linha tem cabeçalho na coluna D
-  if (data.length > 0 && !data[0][3]) {
-    sheet.getRange(1, 4).setValue('ID_Unico');
-  }
-  if (data.length > 0 && !data[0][4]) {
-    sheet.getRange(1, 5).setValue('Status');
-  }
-  if (data.length > 0 && !data[0][5]) {
-    sheet.getRange(1, 6).setValue('Data_Checkin');
+  // Alinhar e expandir cabeçalhos se necessário
+  if (sheet.getLastColumn() < 9) {
+    var headers = ["Nome", "Email", "Instituição", "ID_Unico", "Status", "Data_Checkin", "Email_Enviado", "Pre_Form", "Pos_Form"];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   }
   
   for (var i = 1; i < data.length; i++) {
     var name = data[i][0] || '';
     var existingId = (data[i][3] || '').toString().trim();
     
-    // Gerar ID apenas se a linha tem nome e não tem ID
     if (name && !existingId) {
       var newId = generateUniqueId();
       sheet.getRange(i + 1, 4).setValue(newId);
@@ -261,17 +396,115 @@ function handleGenerateIds() {
   return jsonResponse({ 
     status: 'success', 
     count: count,
-    message: count + ' IDs gerados com sucesso'
+    message: count + ' IDs gerados com sucesso na aba ' + sheet.getName()
   });
 }
 
 // ============================================
-// UTILIDADES
+// OPERAÇÕES CRUD (PARTICIPANTES)
 // ============================================
 
-/**
- * Gera um ID único no formato EVT-XXXXXX
- */
+function handleAddParticipant(p, sheetName) {
+  if (!p || !p.name || !p.email) {
+    return jsonResponse({ status: 'error', message: 'Dados do participante incompletos.' });
+  }
+  
+  var sheet = obterPlanilhaAtiva(sheetName);
+  var id = p.id || generateUniqueId();
+  
+  // Garantir cabeçalhos mínimos até a coluna 9 (Formulários)
+  if (sheet.getLastColumn() < 9) {
+    var headers = ["Nome", "Email", "Instituição", "ID_Unico", "Status", "Data_Checkin", "Email_Enviado", "Pre_Form", "Pos_Form"];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+  
+  var newRow = [
+    p.name,
+    p.email,
+    p.institution || '',
+    id,
+    'Ausente',
+    '',
+    'Não',
+    'Não',
+    'Não'
+  ];
+  
+  sheet.appendRow(newRow);
+  return jsonResponse({ status: 'success', id: id, message: 'Participante adicionado com sucesso!' });
+}
+
+function handleEditParticipant(p, sheetName) {
+  if (!p || !p.id) {
+    return jsonResponse({ status: 'error', message: 'ID do participante não fornecido.' });
+  }
+  
+  var sheet = obterPlanilhaAtiva(sheetName);
+  var data = sheet.getDataRange().getDisplayValues();
+  
+  for (var i = 1; i < data.length; i++) {
+    var rowId = (data[i][3] || '').toString().trim();
+    if (rowId === p.id.toString().trim()) {
+      if (p.name) sheet.getRange(i + 1, 1).setValue(p.name);
+      if (p.email) sheet.getRange(i + 1, 2).setValue(p.email);
+      if (p.institution !== undefined) sheet.getRange(i + 1, 3).setValue(p.institution);
+      
+      return jsonResponse({ status: 'success', message: 'Participante atualizado com sucesso!' });
+    }
+  }
+  
+  return jsonResponse({ status: 'not_found', message: 'Participante não encontrado.' });
+}
+
+function handleDeleteParticipant(participantId, sheetName) {
+  if (!participantId) {
+    return jsonResponse({ status: 'error', message: 'ID não fornecido.' });
+  }
+  
+  var sheet = obterPlanilhaAtiva(sheetName);
+  var data = sheet.getDataRange().getDisplayValues();
+  
+  for (var i = 1; i < data.length; i++) {
+    var rowId = (data[i][3] || '').toString().trim();
+    if (rowId === participantId.toString().trim()) {
+      sheet.deleteRow(i + 1);
+      return jsonResponse({ status: 'success', message: 'Participante excluído com sucesso!' });
+    }
+  }
+  
+  return jsonResponse({ status: 'not_found', message: 'Participante não encontrado.' });
+}
+
+function handleCreateEvent(eventName) {
+  if (!eventName) {
+    return jsonResponse({ status: 'error', message: 'Nome do evento vazio.' });
+  }
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (ss.getSheetByName(eventName)) {
+    return jsonResponse({ status: 'error', message: 'Já existe um evento/aba com este nome.' });
+  }
+  
+  var sheet = ss.insertSheet(eventName);
+  var headers = ["Nome", "Email", "Instituição", "ID_Unico", "Status", "Data_Checkin", "Email_Enviado", "Pre_Form", "Pos_Form"];
+  sheet.appendRow(headers);
+  
+  return jsonResponse({ status: 'success', message: 'Novo evento criado: ' + eventName });
+}
+
+// ============================================
+// ENVIO DE EMAILS
+// ============================================
+
+function handleSendEmails(sheetName) {
+  var count = enviarEmailsComQRCode(sheetName);
+  return jsonResponse({ status: 'success', count: count, message: count + ' e-mails enviados com sucesso.' });
+}
+
+// ============================================
+// UTILIDADES E MENU DA PLANILHA
+// ============================================
+
 function generateUniqueId() {
   var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   var id = 'EVT-';
@@ -281,22 +514,12 @@ function generateUniqueId() {
   return id;
 }
 
-/**
- * Retorna uma resposta JSON formatada
- */
 function jsonResponse(data) {
   return ContentService
     .createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-// ============================================
-// ENVIO DE E-MAILS COM QR CODE
-// ============================================
-
-/**
- * Cria um menu personalizado na planilha para gerenciamento e testes
- */
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('EventCheck 🎓')
@@ -307,34 +530,36 @@ function onOpen() {
 }
 
 function menuGenerateIds() {
-  var result = handleGenerateIds();
+  var result = handleGenerateIds(null);
   SpreadsheetApp.getUi().alert(result.message);
 }
 
 function menuSendTestEmails() {
-  handleGenerateIds();
+  handleGenerateIds(null);
   enviarEmailsTeste();
 }
 
 function menuSendAllEmails() {
-  handleGenerateIds();
-  var count = enviarEmailsComQRCode();
+  handleGenerateIds(null);
+  var count = enviarEmailsComQRCode(null);
   SpreadsheetApp.getUi().alert("Processo concluído! " + count + " e-mails enviados com sucesso.");
 }
 
-/**
- * Envia e-mails para todos da lista que ainda não receberam
- */
-function enviarEmailsComQRCode() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+// ============================================
+// ENVIO DE E-MAILS COM QR CODE E TEMPLATES
+// ============================================
+
+function enviarEmailsComQRCode(sheetName) {
+  var sheet = obterPlanilhaAtiva(sheetName);
   var data = sheet.getDataRange().getValues();
   
   if (data[0].length < 7 || data[0][6] !== 'Email_Enviado') {
-    sheet.getRange(1, 7).setValue('Email_Enviado');
+    // Garantir cabeçalhos mínimos
+    handleGenerateIds(sheet.getName());
+    data = sheet.getDataRange().getValues();
   }
   
   var count = 0;
-  
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
     var nome = row[0] || '';
@@ -362,18 +587,11 @@ function enviarEmailsComQRCode() {
   return count;
 }
 
-/**
- * Envia e-mails de teste apenas para MURILLO MIKOS e MARCELO YUZO HATANAKA NEVES
- */
 function enviarEmailsTeste() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var sheet = obterPlanilhaAtiva(null);
   var data = sheet.getDataRange().getValues();
   
-  if (data[0].length < 7 || data[0][6] !== 'Email_Enviado') {
-    sheet.getRange(1, 7).setValue('Email_Enviado');
-  }
-  
-  var nomesTeste = ["MURILLO MIKOS", "MARCELO YUZO HATANAKA NEVES"];
+  var namesToTest = ["MURILLO MIKOS", "MARCELO YUZO HATANAKA NEVES"];
   var count = 0;
   
   for (var i = 1; i < data.length; i++) {
@@ -383,11 +601,6 @@ function enviarEmailsTeste() {
     var email = row[1] || '';
     var idUnico = row[3] || '';
     
-    if (nomeOriginal) {
-      Logger.log("Analisando linha " + (i + 1) + ": '" + nomeComparacao + "'");
-    }
-    
-    // Envia apenas se bater com os nomes de teste (busca flexível contendo partes dos nomes)
     var isMurillo = nomeComparacao.indexOf("MURILLO") > -1;
     var isMarcelo = nomeComparacao.indexOf("MARCELO") > -1 && 
                     (nomeComparacao.indexOf("YUZO") > -1 || nomeComparacao.indexOf("HATANAKA") > -1 || nomeComparacao.indexOf("NEVES") > -1);
@@ -396,10 +609,7 @@ function enviarEmailsTeste() {
       continue;
     }
     
-    if (!email || !idUnico) {
-      Logger.log("Aviso: " + nomeOriginal + " encontrado, mas sem email ou ID_Unico.");
-      continue;
-    }
+    if (!email || !idUnico) continue;
     
     var qrCodeUrl = "https://quickchart.io/qr?text=" + encodeURIComponent(idUnico) + "&size=250";
     var assunto = "QRCode de presença";
@@ -409,19 +619,14 @@ function enviarEmailsTeste() {
       GmailApp.sendEmail(email, assunto, "Teste QR Code. Código: " + idUnico, { htmlBody: corpoHtml });
       sheet.getRange(i + 1, 7).setValue('Sim (Teste)');
       count++;
-      Logger.log("E-mail de teste enviado para: " + email);
       Utilities.sleep(500);
     } catch(err) {
       Logger.log("Erro ao enviar teste para " + email + ": " + err.toString());
     }
   }
-  
   SpreadsheetApp.getUi().alert("Teste concluído! " + count + " e-mails de teste enviados.");
 }
 
-/**
- * Retorna o template HTML do e-mail
- */
 function obterCorpoHtmlEmail(nome, idUnico, qrCodeUrl, isTeste) {
   var bannerColor = "#0b1a30"; // Azul escuro cirúrgico/tecnológico
   
@@ -482,24 +687,20 @@ function obterCorpoHtmlEmail(nome, idUnico, qrCodeUrl, isTeste) {
 
 function disparadorAutomatico(e) {
   Utilities.sleep(1000); 
-  handleGenerateIds();
-  enviarEmailsComQRCode();
+  handleGenerateIds(null);
+  enviarEmailsComQRCode(null);
 }
 
 /**
  * Gatilho automático executado ao enviar um formulário integrado na planilha.
- * Atualiza as colunas H (Pré-Form) e I (Pós-Form) na aba principal.
  */
 function aoEnviarFormulario(e) {
   try {
     var range = e.range;
     var sheet = range.getSheet();
     var sheetName = sheet.getName();
-    
-    // Captura os valores da resposta enviada
     var rowValues = range.getValues()[0];
     
-    // Assume que a coluna de e-mail é a segunda coluna (B) do formulário
     var emailSubmetido = rowValues[1]; 
     if (!emailSubmetido) return;
     
@@ -508,7 +709,6 @@ function aoEnviarFormulario(e) {
     var mainSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Página1") || SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
     var data = mainSheet.getDataRange().getValues();
     
-    // Identifica se é Pré ou Pós pelo nome da aba
     var colunaAlvo = -1;
     if (sheetName.toLowerCase().indexOf("pre") > -1) {
       colunaAlvo = 8; // Coluna H
@@ -518,7 +718,6 @@ function aoEnviarFormulario(e) {
     
     if (colunaAlvo === -1) return;
     
-    // Busca o participante e marca como respondido
     for (var i = 1; i < data.length; i++) {
       var emailCadastrado = (data[i][1] || '').toString().trim().toLowerCase();
       if (emailCadastrado === emailSubmetido) {

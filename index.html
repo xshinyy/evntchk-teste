@@ -3,97 +3,119 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="description" content="Sistema de autenticação de presença em eventos acadêmicos via QR Code com integração ao Google Planilhas">
-  <meta name="theme-color" content="#0a1628">
+  <meta name="description" content="Painel de credenciamento e presença para os eventos da IFMSA Brazil FAPI">
+  <meta name="theme-color" content="#1d3768">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="EventCheck">
+  <meta name="apple-mobile-web-app-title" content="IFMSA FAPI">
   <meta name="mobile-web-app-capable" content="yes">
-  <!-- Allow inline video playback on iOS (required for camera preview in PWA mode) -->
   <meta name="apple-touch-fullscreen" content="no">
-  <title>EventCheck — Autenticação de Eventos</title>
+  <title>Painel IFMSA Brazil FAPI</title>
 
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a1628'/%3E%3Crect x='5' y='5' width='9' height='9' rx='1' fill='%231565c0'/%3E%3Crect x='18' y='5' width='9' height='9' rx='1' fill='%231565c0'/%3E%3Crect x='5' y='18' width='9' height='9' rx='1' fill='%231565c0'/%3E%3Ccircle cx='22.5' cy='22.5' r='5' fill='none' stroke='%2300e676' stroke-width='1.5'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231d3768'/%3E%3Cpath d='M16 6c-5.5 0-10 4.5-10 10s4.5 10 10 10 10-4.5 10-10S21.5 6 16 6zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8z' fill='%23ffffff'/%3E%3Cpath d='M17 11h-2v4h-4v2h4v4h2v-4h4v-2h-4z' fill='%23f59e0b'/%3E%3C/svg%3E">
 
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-
+  <!-- Chart.js via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Google Sign-In SDK -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <!-- html5-qrcode for camera scanning -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <!-- qrcode.js for QR generation -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
-  <!-- External Stylesheet -->
+  <!-- External Premium Stylesheet -->
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-  <!-- ==================== LOGIN SCREEN ==================== -->
+  <!-- ==================== TELA DE LOGIN ==================== -->
   <div id="login-screen">
     <div class="login-card">
       <div class="login-logo">
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <rect x="2" y="2" width="14" height="14" rx="2" fill="white" opacity="0.9"/>
-          <rect x="24" y="2" width="14" height="14" rx="2" fill="white" opacity="0.9"/>
-          <rect x="2" y="24" width="14" height="14" rx="2" fill="white" opacity="0.9"/>
-          <circle cx="31" cy="31" r="8" stroke="#00e676" stroke-width="2.5" fill="none"/>
-          <path d="M27 31l3 3 5-5" stroke="#00e676" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <!-- Ícone Estilizado da Serpente de Esculápio / Medicina -->
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #ffffff;">
+          <path d="M4.5 16.5c-1.5 1.25-2.5 3-2.5 4.5v1h20v-1c0-1.5-1-3.25-2.5-4.5"/>
+          <path d="M12 2v14"/>
+          <path d="M12 2c1 0 2 1.5 2 3s-1 2.5-2 3.5c-1-1-2-2-2-3.5s1-3 2-3z"/>
+          <path d="M8 12c2.5-1 5.5-1 8 0"/>
+          <path d="M9.5 8.5c1.5-.5 3.5-.5 5 0"/>
         </svg>
       </div>
-      <h1>EventCheck</h1>
-      <p class="subtitle">Sistema de Autenticação de Eventos</p>
+      <h1>Painel IFMSA FAPI</h1>
+      <p class="subtitle">Credenciamento de Eventos</p>
+      
+      <!-- Container do Botão Nativo do Google -->
+      <div class="google-login-container">
+        <div id="g-login-btn"></div>
+      </div>
+
+      <div class="login-divider">ou usar senha de acesso</div>
+
       <div class="login-input-group">
-        <span class="input-icon">🔒</span>
+        <span class="input-icon">🔑</span>
         <input type="password" id="password-input" placeholder="Digite a senha de acesso" autocomplete="off">
       </div>
-      <p class="login-error" id="login-error">Senha incorreta. Tente novamente.</p>
+      
+      <p class="login-error" id="login-error">Senha incorreta ou acesso não autorizado.</p>
+      
       <button class="btn btn-primary" id="login-btn" type="button">
-        Entrar
+        Entrar com Senha
       </button>
     </div>
   </div>
 
-  <!-- ==================== MAIN APP ==================== -->
+  <!-- ==================== APLICATIVO PRINCIPAL ==================== -->
   <div id="app" class="hidden">
 
-    <!-- Header -->
+    <!-- Cabeçalho (Header) -->
     <header class="app-header">
       <div class="header-left">
         <div class="header-logo">
-          <svg width="18" height="18" viewBox="0 0 40 40" fill="none">
-            <rect x="2" y="2" width="14" height="14" rx="2" fill="white" opacity="0.9"/>
-            <rect x="24" y="2" width="14" height="14" rx="2" fill="white" opacity="0.9"/>
-            <rect x="2" y="24" width="14" height="14" rx="2" fill="white" opacity="0.9"/>
-            <circle cx="31" cy="31" r="7" stroke="#00e676" stroke-width="2" fill="none"/>
-            <path d="M27.5 31l2.5 2.5 4-4" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <!-- Mini Logo IFMSA -->
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #ffffff;">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           </svg>
         </div>
         <div class="header-info">
-          <h2 id="header-event-name">Configurar Evento</h2>
+          <!-- Dropdown Seletor de Eventos (Abas) -->
+          <div class="event-selector-container">
+            <select id="event-select" class="event-select">
+              <option value="">Carregando eventos...</option>
+            </select>
+            <span class="event-select-arrow">▼</span>
+          </div>
           <div class="event-status">
             <span class="status-dot" id="status-dot"></span>
             <span id="status-text">Desconectado</span>
-            <span id="auto-refresh-timer" style="margin-left: 5px; font-size: 0.70rem; color: var(--text-secondary); opacity: 0.85;"></span>
+            <span id="auto-refresh-timer" style="opacity: 0.8;"></span>
           </div>
         </div>
       </div>
+      
       <div class="header-actions">
+        <!-- Seletor Tema Claro/Escuro -->
+        <button class="btn btn-icon btn-secondary" id="theme-toggle-btn" title="Alternar tema" style="border-radius: 50%;">🌙</button>
+        <!-- Pill com perfil logado -->
+        <div class="profile-pill hidden" id="profile-pill">
+          <div class="profile-avatar" id="profile-avatar">U</div>
+          <span id="profile-name" style="max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Usuário</span>
+        </div>
         <button class="btn btn-icon btn-secondary" id="refresh-btn" title="Atualizar dados">🔄</button>
         <button class="btn btn-icon btn-secondary" id="logout-btn" title="Sair">🚪</button>
       </div>
     </header>
 
-    <!-- ==================== DASHBOARD ==================== -->
+    <!-- ==================== TELA: DASHBOARD ==================== -->
     <section id="dashboard-section" class="section active">
-      <p class="section-title">Visão Geral</p>
+      <p class="section-title">Estatísticas Gerais</p>
+      
+      <!-- Cards de Métricas -->
       <div class="stats-grid">
         <div class="stat-card total">
           <div class="stat-icon">👥</div>
           <div class="stat-value" id="stat-total">—</div>
-          <div class="stat-label">Total Inscritos</div>
+          <div class="stat-label">Inscritos</div>
         </div>
         <div class="stat-card present">
           <div class="stat-icon">✅</div>
@@ -111,23 +133,41 @@
           <div class="stat-label">% Presença</div>
         </div>
       </div>
+
+      <!-- Gráficos Interativos -->
+      <div class="dashboard-charts">
+        <div class="chart-card">
+          <h4>Proporção de Presença</h4>
+          <div class="chart-wrapper">
+            <canvas id="presence-chart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h4>Fluxo de Entrada (Acumulado)</h4>
+          <div class="chart-wrapper">
+            <canvas id="flow-chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Check-ins Recentes -->
       <div class="recent-section">
         <div class="recent-header">
-          <h3>Check-ins Recentes</h3>
+          <h3>Entradas Recentes</h3>
           <span class="recent-count" id="recent-count">0 hoje</span>
         </div>
         <div class="recent-list" id="recent-list">
           <div class="empty-state" id="empty-recent">
             <div class="empty-icon">📋</div>
-            <p>Nenhum check-in registrado ainda. Use o scanner para registrar presenças.</p>
+            <p>Nenhum check-in registrado na sessão atual.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- ==================== SCANNER ==================== -->
+    <!-- ==================== TELA: SCANNER ==================== -->
     <section id="scanner-section" class="section">
-      <p class="section-title">Scanner de Presença</p>
+      <p class="section-title">Leitor de Credenciais</p>
       <div class="scanner-wrapper">
         <div class="scanner-viewport" id="scanner-viewport">
           <div class="scanner-corners">
@@ -138,22 +178,26 @@
           <div id="scanner-view"></div>
           <div class="empty-state" id="scanner-placeholder" style="padding-top: 80px;">
             <div class="empty-icon">📷</div>
-            <p>Toque em "Iniciar Scanner" para ativar a câmera</p>
+            <p>Clique abaixo para ativar o leitor de QR Code</p>
           </div>
         </div>
+        
         <div class="scanner-controls">
           <button class="btn btn-primary" id="start-scan-btn">📷 Iniciar Scanner</button>
           <button class="btn btn-secondary hidden" id="switch-camera-btn">🔄 Alternar Câmera</button>
-          <button class="btn btn-danger hidden" id="stop-scan-btn">⏹ Parar</button>
+          <button class="btn btn-danger hidden" id="stop-scan-btn">⏹ Parar Leitor</button>
         </div>
-        <p class="scanner-tip">Aponte a câmera para o QR Code do participante. O check-in será registrado automaticamente.</p>
-        <div style="margin-top: 8px;">
+        <p class="scanner-tip">Posicione o QR Code impresso ou no celular dentro da área de leitura.</p>
+        
+        <div>
           <label class="btn btn-secondary" style="cursor: pointer; display: inline-flex;">
-            📁 Enviar imagem de QR
+            📁 Enviar Imagem de QR
             <input type="file" accept="image/*" capture="environment" id="qr-file-input" style="display: none;">
           </label>
         </div>
       </div>
+
+      <!-- Feedback de Escaneamento -->
       <div class="scan-result" id="scan-result">
         <div class="result-icon" id="result-icon"></div>
         <div class="result-info">
@@ -162,89 +206,90 @@
         </div>
       </div>
 
-      <!-- Check-in Manual -->
+      <!-- Check-in Manual / Pesquisa rápida -->
       <div class="manual-checkin-container" style="margin-top: 25px; padding: 20px; background: var(--bg-glass); border: 1px solid var(--border); border-radius: var(--radius-md);">
         <p style="font-size: 0.85rem; font-weight: 700; margin-bottom: 12px; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
           <span>📝</span> Check-in Manual
         </p>
         <div class="qr-search" style="margin-bottom: 0;">
           <span class="search-icon">🔍</span>
-          <input type="text" id="manual-search-input" placeholder="Buscar participante por nome ou e-mail..." style="width: 100%; padding: 10px 10px 10px 35px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 0.82rem;">
+          <input type="text" id="manual-search-input" placeholder="Buscar participante por nome ou e-mail...">
         </div>
-        <div id="manual-search-results" class="manual-search-results hidden" style="max-height: 180px; overflow-y: auto; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-top: 8px; padding: 4px;">
-          <!-- Resultados dinâmicos inseridos via JS -->
+        <div id="manual-search-results" class="manual-search-results hidden">
+          <!-- Resultados dinâmicos -->
         </div>
       </div>
     </section>
 
-    <!-- ==================== QR CODES ==================== -->
+    <!-- ==================== TELA: PARTICIPANTES / QR CODES ==================== -->
     <section id="qrcodes-section" class="section">
-      <p class="section-title">QR Codes dos Participantes</p>
+      <p class="section-title">Gerenciador de Participantes</p>
       <div class="qr-toolbar">
-        <button class="btn btn-primary" id="load-qr-btn">📥 Carregar da Planilha</button>
+        <button class="btn btn-primary" id="open-add-modal-btn">➕ Novo Participante</button>
+        <button class="btn btn-secondary" id="send-emails-bulk-btn">✉️ Enviar QR Codes</button>
         <button class="btn btn-secondary" id="print-qr-btn">🖨️ Imprimir Todos</button>
       </div>
+      
       <div class="qr-search">
         <span class="search-icon">🔍</span>
-        <input type="text" id="qr-search-input" placeholder="Buscar participante...">
+        <input type="text" id="qr-search-input" placeholder="Pesquisar participante por nome, e-mail ou código...">
       </div>
+
       <div class="qr-grid" id="qr-grid">
         <div class="empty-state" id="empty-qr">
-          <div class="empty-icon">📱</div>
-          <p>Carregue os participantes da planilha para gerar os QR Codes.</p>
+          <div class="empty-icon">👥</div>
+          <p>Carregando lista de participantes da planilha ativa...</p>
         </div>
       </div>
     </section>
 
-    <!-- ==================== CONFIGURAÇÕES ==================== -->
+    <!-- ==================== TELA: CONFIGURAÇÕES ==================== -->
     <section id="config-section" class="section">
-      <p class="section-title">Configurações do Evento</p>
+      <p class="section-title">Ajustes & Eventos</p>
       <div class="config-form">
-        <div class="input-group">
-          <label for="config-event-name">Nome do Evento</label>
-          <input type="text" id="config-event-name" placeholder="Ex: Semana Acadêmica 2026">
+        
+        <!-- Bloco: Criar Novo Evento -->
+        <div class="input-group" style="padding: 20px; background: var(--bg-glass-light); border: 1px solid var(--border); border-radius: var(--radius-md);">
+          <label>Criar Novo Evento (Nova Aba)</label>
+          <span class="input-hint" style="margin-bottom: 10px;">Isso criará uma nova aba limpa na planilha do Sheets para credenciamento independente.</span>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="new-event-name-input" placeholder="Ex: Mini Curso Cirurgia" style="flex: 1;">
+            <button class="btn btn-gold" id="create-event-btn" style="padding: 10px 20px;">Criar</button>
+          </div>
         </div>
+
         <div class="input-group">
-          <label for="config-script-url">URL do Google Apps Script</label>
+          <label for="config-google-client-id">ID de Cliente Google OAuth (Client ID)</label>
+          <input type="text" id="config-google-client-id" placeholder="Ex: xxxxxxx.apps.googleusercontent.com">
+          <span class="input-hint">Obtenha no Google Cloud Console. Se deixado em branco, o login Google ficará desativado.</span>
+        </div>
+
+        <div class="input-group">
+          <label for="config-script-url">URL do Google Apps Script Web App</label>
           <input type="url" id="config-script-url" placeholder="https://script.google.com/macros/s/.../exec">
-          <span class="input-hint">Cole aqui a URL do Web App publicado do Google Apps Script.</span>
+          <span class="input-hint">Cole aqui a URL de implantação ativa do Web App.</span>
         </div>
+        
         <div class="config-actions">
-          <button class="btn btn-primary" id="save-config-btn">💾 Salvar</button>
-          <button class="btn btn-secondary" id="test-connection-btn">🔗 Testar</button>
+          <button class="btn btn-primary" id="save-config-btn">💾 Salvar Configurações</button>
+          <button class="btn btn-secondary" id="test-connection-btn">🔗 Testar Conexão</button>
         </div>
+
         <div class="connection-status hidden" id="connection-status">
           <span id="connection-icon"></span>
           <span id="connection-text"></span>
         </div>
+
         <hr class="config-divider">
-        <div class="input-group">
-          <label>Instruções Rápidas</label>
-          <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.7;">
-            <p><strong>1.</strong> Crie uma planilha no Google Sheets com as colunas:<br>
-              <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 0.78rem;">Nome | Email | Instituição | ID_Unico | Status | Data_Checkin</code>
-            </p>
-            <p style="margin-top: 10px;"><strong>2.</strong> Abra <strong>Extensões → Apps Script</strong> e cole o código do arquivo Code.gs</p>
-            <p style="margin-top: 10px;"><strong>3.</strong> Publique como Web App (Execute como: Eu, Acesso: Qualquer pessoa)</p>
-            <p style="margin-top: 10px;"><strong>4.</strong> Cole a URL acima e salve</p>
-          </div>
-        </div>
-        <hr class="config-divider">
-        <div class="input-group">
-          <label>Ações</label>
-          <button class="btn btn-secondary" id="generate-ids-btn" style="margin-top: 4px;">🔑 Gerar IDs para Participantes sem ID</button>
-          <span class="input-hint">Gera IDs únicos automaticamente na coluna D para participantes que ainda não possuem.</span>
-        </div>
-        <hr class="config-divider">
-        <button class="btn btn-danger" id="clear-data-btn" style="margin-top: 8px;">🗑️ Limpar Dados Locais</button>
-        <hr class="config-divider">
+        <button class="btn btn-danger" id="clear-data-btn">🗑️ Limpar Armazenamento Local</button>
+        
         <div class="app-version-container" style="text-align: center; margin-top: 25px; font-size: 0.75rem; color: var(--text-secondary); opacity: 0.75;">
-          Versão do Aplicativo: <span id="app-version">v1.3.3</span>
+          Versão do Painel: <span id="app-version">v2.0.0</span>
         </div>
       </div>
     </section>
 
-    <!-- Bottom Navigation -->
+    <!-- Barra de Navegação Inferior -->
     <nav class="bottom-nav" id="bottom-nav">
       <button class="nav-item active" data-section="dashboard">
         <span class="nav-icon">📊</span>
@@ -255,8 +300,8 @@
         <span class="nav-label">Scanner</span>
       </button>
       <button class="nav-item" data-section="qrcodes">
-        <span class="nav-icon">📱</span>
-        <span class="nav-label">QR Codes</span>
+        <span class="nav-icon">👥</span>
+        <span class="nav-label">Inscritos</span>
       </button>
       <button class="nav-item" data-section="config">
         <span class="nav-icon">⚙️</span>
@@ -265,26 +310,88 @@
     </nav>
   </div>
 
-  <!-- Toast Container -->
+  <!-- Contêiner de Notificações Toast -->
   <div class="toast-container" id="toast-container"></div>
 
-  <!-- Modal for expanded QR view -->
+  <!-- ==================== MODAIS ==================== -->
+  
+  <!-- Modal 1: Visualização de QR Code Expandido -->
   <div class="modal-backdrop hidden" id="qr-modal">
     <div class="modal-content">
-      <h3 id="modal-name"></h3>
-      <p class="modal-subtitle" id="modal-email"></p>
+      <h3 id="modal-name">Participante</h3>
+      <p class="modal-subtitle" id="modal-email">email@exemplo.com</p>
       <div class="modal-qr" id="modal-qr-container"></div>
       <div class="modal-actions">
-        <button class="btn btn-primary" id="modal-download-btn">⬇️ Baixar</button>
+        <button class="btn btn-gold" id="modal-edit-btn">✏️ Editar</button>
         <button class="btn btn-secondary" id="modal-close-btn">Fechar</button>
       </div>
     </div>
   </div>
 
-  <!-- Loading Overlay -->
+  <!-- Modal 2: Novo Participante -->
+  <div class="modal-backdrop hidden" id="add-participant-modal">
+    <div class="modal-content">
+      <h3>Novo Participante</h3>
+      <p class="modal-subtitle">Adicionar registro diretamente na planilha do Sheets</p>
+      
+      <div class="config-form" style="gap: 15px;">
+        <div class="input-group">
+          <label for="add-part-name">Nome Completo</label>
+          <input type="text" id="add-part-name" placeholder="Ex: Murillo Mikos">
+        </div>
+        <div class="input-group">
+          <label for="add-part-email">E-mail</label>
+          <input type="email" id="add-part-email" placeholder="Ex: murillo@gmail.com">
+        </div>
+        <div class="input-group">
+          <label for="add-part-institution">Instituição</label>
+          <input type="text" id="add-part-institution" placeholder="Ex: FAPI - Faculdade de Apucarana">
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="add-part-save-btn">Salvar</button>
+        <button class="btn btn-secondary" id="add-part-cancel-btn">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Editar Participante -->
+  <div class="modal-backdrop hidden" id="edit-participant-modal">
+    <div class="modal-content">
+      <h3>Editar Cadastro</h3>
+      <p class="modal-subtitle">Modificar participante na planilha do Sheets</p>
+      <input type="hidden" id="edit-part-id">
+      
+      <div class="config-form" style="gap: 15px;">
+        <div class="input-group">
+          <label for="edit-part-name">Nome Completo</label>
+          <input type="text" id="edit-part-name">
+        </div>
+        <div class="input-group">
+          <label for="edit-part-email">E-mail</label>
+          <input type="email" id="edit-part-email">
+        </div>
+        <div class="input-group">
+          <label for="edit-part-institution">Instituição</label>
+          <input type="text" id="edit-part-institution">
+        </div>
+      </div>
+      
+      <div class="modal-actions" style="flex-direction: column; gap: 8px;">
+        <div style="display: flex; gap: 12px; width: 100%;">
+          <button class="btn btn-primary" id="edit-part-save-btn">Salvar Alterações</button>
+          <button class="btn btn-secondary" id="edit-part-cancel-btn">Cancelar</button>
+        </div>
+        <button class="btn btn-danger" id="edit-part-delete-btn" style="width: 100%;">🗑️ Excluir Participante</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overlay de Carregamento (Loading) -->
   <div class="loading-overlay hidden" id="loading-overlay">
     <div class="loading-spinner"></div>
-    <p class="loading-text" id="loading-text">Carregando...</p>
+    <p class="loading-text" id="loading-text">Processando requisição...</p>
   </div>
 
   <!-- Main Application Script -->
