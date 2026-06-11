@@ -11,14 +11,6 @@
   // CONSTANTES E CONFIGURAÇÕES
   // ============================================
   const APP_VERSION = 'v2.1.0';
-  
-  // Theatre.js variables
-  let theatreProj = null;
-  let theatreSheet = null;
-  let headerActor = null;
-  let cardsActor = null;
-  
-  const APP_PASSWORD = 'IFMSAFAPI123';
   const STORAGE_KEYS = {
     scriptUrl: 'eventcheck_script_url_v2',
     googleClientId: 'eventcheck_google_client_id_v2',
@@ -31,8 +23,8 @@
   // ESTADO DA APLICAÇÃO (STATE)
   // ============================================
   const state = {
-    scriptUrl: '',
-    googleClientId: '',
+    scriptUrl: 'https://script.google.com/macros/s/AKfycbxyD0qnc2Lt6y4DWC1IjDuZwjzURwIFoI8mxgSMDlP82Fr8ksTh0KbVCWA6ZwcyF7E/exec',
+    googleClientId: '447212539445-62am0h0b4oc9vpltj37eekp0bnqbs49a.apps.googleusercontent.com',
     googleToken: '',
     activeUser: null,
     isAuthorized: false,
@@ -69,8 +61,6 @@
     app: document.getElementById('app'),
     
     // Login
-    passwordInput: document.getElementById('password-input'),
-    loginBtn: document.getElementById('login-btn'),
     loginError: document.getElementById('login-error'),
     googleBtnContainer: document.getElementById('g-login-btn'),
     
@@ -185,8 +175,7 @@
       window.IFMSAParticles.init('particle-canvas');
     }
     
-    // ═══ V2.1: Tilt effect nos stat cards ═══
-    setupTiltEffect();
+    // Dynamic 3D tilt and specular highlights are handled globally inside setupGlassEffects()
     
     // Configurar SDK do Google Sign-In se houver Client ID salvo
     if (state.googleClientId) {
@@ -200,18 +189,13 @@
       }
     }
     
-    // Seletor do input de senha escutar ENTER
-    dom.passwordInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') handlePasswordLogin();
-    });
-    
-    // Inicializar Theatre.js
-    initTheatre();
+    // Inicializar efeitos de Glassmorphism Premium (iOS Style)
+    setupGlassEffects();
   }
 
   function loadConfig() {
-    state.scriptUrl = localStorage.getItem(STORAGE_KEYS.scriptUrl) || '';
-    state.googleClientId = localStorage.getItem(STORAGE_KEYS.googleClientId) || '';
+    state.scriptUrl = localStorage.getItem(STORAGE_KEYS.scriptUrl) || 'https://script.google.com/macros/s/AKfycbxyD0qnc2Lt6y4DWC1IjDuZwjzURwIFoI8mxgSMDlP82Fr8ksTh0KbVCWA6ZwcyF7E/exec';
+    state.googleClientId = localStorage.getItem(STORAGE_KEYS.googleClientId) || '447212539445-62am0h0b4oc9vpltj37eekp0bnqbs49a.apps.googleusercontent.com';
     state.activeEvent = localStorage.getItem(STORAGE_KEYS.activeEvent) || '';
     state.theme = localStorage.getItem(STORAGE_KEYS.theme) || 'dark';
     
@@ -226,6 +210,11 @@
   // ============================================
   
   function inicializarGoogleOAuth() {
+    if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
+      setTimeout(inicializarGoogleOAuth, 200); // Tenta novamente em 200ms se o SDK ainda estiver carregando
+      return;
+    }
+    
     try {
       google.accounts.id.initialize({
         client_id: state.googleClientId,
@@ -273,57 +262,23 @@
     }
     
     // Testar se o e-mail está autorizado no backend
-    const ok = await testarAcessoBackend();
+    const res = await testarAcessoBackend();
     hideLoading();
     
-    if (ok) {
+    if (res.success) {
       entrarNoAplicativo();
       showToast(`Bem-vindo, ${state.activeUser.name}!`, 'success');
     } else {
       state.googleToken = '';
       state.activeUser = null;
-      showLoginError('Seu e-mail não está cadastrado na lista de acessos autorizados.');
+      showLoginError(res.message || 'Seu e-mail não está cadastrado na lista de acessos autorizados.');
     }
   }
 
-  async function handlePasswordLogin() {
-    const pwd = dom.passwordInput.value.trim();
-    if (!pwd) {
-      showLoginError('Por favor, digite a senha.');
-      return;
-    }
-    
-    // Se for a senha mestre local, permite entrar mesmo sem URL do script configurada (bootstrap inicial)
-    if (pwd === 'IFMSAFAPI123') {
-      state.activeUser = {
-        name: 'Administrador',
-        email: 'admin@legado.com',
-        picture: ''
-      };
-      entrarNoAplicativo();
-      showToast('Autenticado com sucesso!', 'success');
-      return;
-    }
-    
-    showLoading('Conectando...');
-    const success = await testarAcessoBackend(pwd);
-    hideLoading();
-    
-    if (success) {
-      state.activeUser = {
-        name: 'Administrador',
-        email: 'admin@legado.com',
-        picture: ''
-      };
-      entrarNoAplicativo();
-      showToast('Autenticado com sucesso (Senha)!', 'success');
-    } else {
-      showLoginError('Senha incorreta ou erro de conexão.');
-    }
-  }
+
 
   async function testarAcessoBackend(passwordOverride) {
-    if (!state.scriptUrl) return false;
+    if (!state.scriptUrl) return { success: false, message: 'URL da API não configurada.' };
     
     const url = `${state.scriptUrl}?action=list_events` + 
       (passwordOverride ? `&password=${passwordOverride}` : `&googleToken=${state.googleToken}`);
@@ -333,12 +288,13 @@
       const data = await response.json();
       if (data.status === 'success') {
         state.isAuthorized = true;
-        return true;
+        return { success: true };
       }
+      return { success: false, message: data.message || 'Não autorizado.' };
     } catch(e) {
       console.error('Erro de autenticação no backend:', e);
+      return { success: false, message: 'Erro de conexão com o servidor.' };
     }
-    return false;
   }
 
   function entrarNoAplicativo() {
@@ -358,11 +314,6 @@
     
     carregarEventosDoSheets();
     setupSilentWarmupCamera();
-    
-    // Disparar animação cinemática do Theatre.js
-    if (theatreSheet) {
-      theatreSheet.sequence.play({ iterationCount: 1 });
-    }
   }
 
   function logout() {
@@ -372,7 +323,6 @@
     dom.profilePill.classList.add('hidden');
     dom.app.classList.add('hidden');
     dom.loginScreen.classList.remove('hidden');
-    dom.passwordInput.value = '';
     
     // Parar câmera se ativa
     if (state.isScanning) {
@@ -1452,9 +1402,6 @@
     dom.logoutBtn.addEventListener('click', logout);
     dom.themeToggleBtn.addEventListener('click', toggleTheme);
     
-    // Login
-    dom.loginBtn.addEventListener('click', handlePasswordLogin);
-    
     // Scanner
     dom.startScanBtn.addEventListener('click', startScanner);
     dom.stopScanBtn.addEventListener('click', stopScanner);
@@ -1521,101 +1468,66 @@
     }
   }
   
-  function setupTiltEffect() {
-    const cards = document.querySelectorAll('[data-tilt]');
-    cards.forEach(card => {
-      card.addEventListener('mousemove', (e) => {
+  function setupGlassEffects() {
+    let activeCard = null;
+
+    document.addEventListener('mousemove', (e) => {
+      const card = e.target.closest('.glass-card, .login-card, .manual-checkin-container');
+      
+      // If we moved to a different card or outside of any card
+      if (activeCard && activeCard !== card) {
+        resetCardTransform(activeCard);
+        activeCard = null;
+      }
+      
+      if (card) {
+        if (!activeCard) {
+          activeCard = card;
+          // Set fast transition for tracking to give physical inertia
+          card.style.transition = 'transform 0.1s cubic-bezier(0.25, 1, 0.5, 1), border-color 0.3s ease, box-shadow 0.3s ease';
+        }
+        
         const rect = card.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
+        
+        // Update specular shine coordinates
+        card.style.setProperty('--mx', `${x}px`);
+        card.style.setProperty('--my', `${y}px`);
+        card.style.setProperty('--mouse-x', `${x}px`);
+        card.style.setProperty('--mouse-y', `${y}px`);
+        
+        // 3D Tilt calculation
         const centerX = rect.width / 2;
         const centerY = rect.height / 2;
-        const rotateX = ((y - centerY) / centerY) * -6;
-        const rotateY = ((x - centerX) / centerX) * 6;
-        card.style.transform = `perspective(800px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-4px) scale(1.02)`;
-      });
-      
-      card.addEventListener('mouseleave', () => {
-        card.style.transform = '';
-      });
-    });
-  }
-
-  function initTheatre() {
-    const isDev = window.location.hostname === 'localhost' || 
-                  window.location.hostname === '127.0.0.1' || 
-                  window.location.protocol === 'file:';
-                  
-    if (!window.Theatre) {
-      console.log("Theatre.js não está disponível.");
-      return;
-    }
-
-    if (isDev && window.Theatre.studio) {
-      try {
-        window.Theatre.studio.initialize();
-      } catch (e) {
-        console.error("Erro ao inicializar o Theatre Studio:", e);
-      }
-    }
-    
-    let savedState = null;
-    const localStateStr = localStorage.getItem('theatre_fapi_state');
-    if (localStateStr) {
-      try {
-        savedState = JSON.parse(localStateStr);
-      } catch (e) {
-        console.error("Erro ao fazer parse do estado salvo do Theatre:", e);
-      }
-    }
-    
-    try {
-      theatreProj = window.Theatre.core.getProject('PainelIFMSA', { state: savedState });
-      theatreSheet = theatreProj.sheet('Intro_Dashboard');
-      
-      if (isDev) {
-        window.theatreProj = theatreProj;
-        window.theatreSheet = theatreSheet;
-      }
-      
-      // Registrar ator do cabeçalho e sidebar
-      headerActor = theatreSheet.object('Header_Sidebar', {
-        sidebarX: -80,
-        sidebarOpacity: 0,
-        headerY: -64,
-        headerOpacity: 0
-      });
-      
-      headerActor.onValuesChange((values) => {
-        const sidebar = document.querySelector('.app-sidebar');
-        const header = document.querySelector('.app-header');
+        const percentX = (x - centerX) / centerX; // Range: -1 to 1
+        const percentY = (y - centerY) / centerY; // Range: -1 to 1
         
-        if (sidebar) {
-          sidebar.style.transform = `translateX(${values.sidebarX}px)`;
-          sidebar.style.opacity = values.sidebarOpacity;
+        const maxRotation = 10; // Max rotation degrees
+        const rotX = -percentY * maxRotation;
+        const rotY = percentX * maxRotation;
+        
+        card.style.transform = `perspective(1000px) rotateX(${rotX}deg) rotateY(${rotY}deg) scale3d(1.025, 1.025, 1.025)`;
+      }
+    });
+
+    // Reset card when mouse leaves the window entirely
+    document.addEventListener('mouseleave', () => {
+      if (activeCard) {
+        resetCardTransform(activeCard);
+        activeCard = null;
+      }
+    });
+
+    function resetCardTransform(card) {
+      card.style.transform = '';
+      card.style.transition = 'transform 0.6s cubic-bezier(0.25, 1, 0.5, 1), border-color 0.4s ease, box-shadow 0.4s ease';
+      // Clear inline transition after the transition finishes to avoid style pollution
+      setTimeout(() => {
+        if (activeCard !== card) {
+          card.style.transition = '';
         }
-        if (header) {
-          header.style.transform = `translateY(${values.headerY}px)`;
-          header.style.opacity = values.headerOpacity;
-        }
-      });
-      
-      // Registrar ator dos cards do dashboard
-      cardsActor = theatreSheet.object('Dashboard_Cards', {
-        opacity: 0,
-        scale: 0.9,
-        yOffset: 30
-      });
-      
-      cardsActor.onValuesChange((values) => {
-        const cards = document.querySelectorAll('.stat-card');
-        cards.forEach((card) => {
-          card.style.opacity = values.opacity;
-          card.style.transform = `scale(${values.scale}) translateY(${values.yOffset}px)`;
-        });
-      });
-    } catch (err) {
-      console.error("Erro ao inicializar o Theatre.js:", err);
+      }, 600);
     }
   }
 

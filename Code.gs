@@ -16,7 +16,6 @@
 // ============================================
 // CONFIGURAÇÕES DO SISTEMA
 // ============================================
-const APP_PASSWORD = 'IFMSAFAPI123'; // Senha legada para compatibilidade de API
 
 // ============================================
 // HANDLERS HTTP (API)
@@ -29,7 +28,11 @@ function doGet(e) {
     // Verificar Autenticação (Token do Google ou Senha)
     var auth = verificarAutorizacao(params, null);
     if (!auth.autorizado) {
-      return jsonResponse({ status: 'unauthorized', message: 'Usuário não autorizado.' });
+      var msg = 'Usuário não autorizado.';
+      if (auth.emailTentativa) {
+        msg += ' E-mail verificado: ' + auth.emailTentativa;
+      }
+      return jsonResponse({ status: 'unauthorized', message: msg });
     }
     
     var action = params.action || 'list';
@@ -58,7 +61,11 @@ function doPost(e) {
     // Verificar Autenticação (Token do Google ou Senha)
     var auth = verificarAutorizacao(null, data);
     if (!auth.autorizado) {
-      return jsonResponse({ status: 'unauthorized', message: 'Usuário não autorizado.' });
+      var msg = 'Usuário não autorizado.';
+      if (auth.emailTentativa) {
+        msg += ' E-mail verificado: ' + auth.emailTentativa;
+      }
+      return jsonResponse({ status: 'unauthorized', message: msg });
     }
     
     var action = data.action || '';
@@ -117,14 +124,8 @@ function verificarGoogleToken(idToken) {
  */
 function verificarAutorizacao(params, postData) {
   var token = (params && params.googleToken) || (postData && postData.googleToken);
-  var password = (params && params.password) || (postData && postData.password);
   
-  // 1. Validar senha legada v1
-  if (password === APP_PASSWORD) {
-    return { autorizado: true, email: 'admin@legado.com', nome: 'Administrador Legado' };
-  }
-  
-  // 2. Validar login individual do Google
+  // Validar login individual do Google
   if (token) {
     var email = verificarGoogleToken(token);
     if (email) {
@@ -157,6 +158,7 @@ function verificarAutorizacao(params, postData) {
           return { autorizado: true, email: email, nome: "Dono da Planilha" };
         }
       }
+      return { autorizado: false, emailTentativa: email };
     }
   }
   
