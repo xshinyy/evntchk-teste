@@ -23,7 +23,7 @@
   // ESTADO DA APLICAÇÃO (STATE)
   // ============================================
   const state = {
-    scriptUrl: 'https://script.google.com/macros/s/AKfycbxyD0qnc2Lt6y4DWC1IjDuZwjzURwIFoI8mxgSMDlP82Fr8ksTh0KbVCWA6ZwcyF7E/exec',
+    scriptUrl: 'https://script.google.com/macros/s/AKfycbyol8lThrdasoCSXaP4spb4dOzuFNQgOKweTUBvrgp3MmVAMITCsp2IAoElF44i_nFx/exec',
     googleClientId: '447212539445-62am0h0b4oc9vpltj37eekp0bnqbs49a.apps.googleusercontent.com',
     googleToken: '',
     activeUser: null,
@@ -194,7 +194,7 @@
   }
 
   function loadConfig() {
-    state.scriptUrl = localStorage.getItem(STORAGE_KEYS.scriptUrl) || 'https://script.google.com/macros/s/AKfycbxyD0qnc2Lt6y4DWC1IjDuZwjzURwIFoI8mxgSMDlP82Fr8ksTh0KbVCWA6ZwcyF7E/exec';
+    state.scriptUrl = localStorage.getItem(STORAGE_KEYS.scriptUrl) || 'https://script.google.com/macros/s/AKfycbyol8lThrdasoCSXaP4spb4dOzuFNQgOKweTUBvrgp3MmVAMITCsp2IAoElF44i_nFx/exec';
     state.googleClientId = localStorage.getItem(STORAGE_KEYS.googleClientId) || '447212539445-62am0h0b4oc9vpltj37eekp0bnqbs49a.apps.googleusercontent.com';
     state.activeEvent = localStorage.getItem(STORAGE_KEYS.activeEvent) || '';
     state.theme = localStorage.getItem(STORAGE_KEYS.theme) || 'dark';
